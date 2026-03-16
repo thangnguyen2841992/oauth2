@@ -1,0 +1,13 @@
+server:
+  port: 8080
+
+spring:
+  data:
+    redis:
+      url: redis://localhost:6379
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: https://auth.example.com/.well-known/jwks.json
