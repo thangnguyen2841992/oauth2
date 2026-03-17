@@ -1,16 +1,17 @@
-package com.example.jwtjwks.security;
+package com.thang.user;
 
-import com.thang.user.RevokedTokenService;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
 
-import java.util.*;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Component
@@ -30,16 +31,16 @@ public class JwtAuthConverter implements Converter<Jwt, JwtAuthenticationToken> 
     public JwtAuthenticationToken convert(Jwt jwt) {
         // Defensive checks (optional)
         if (jwt.getIssuer() == null || !EXPECTED_ISS.equals(jwt.getIssuer().toString())) {
-            throw oauth2Error("invalid_token", "Invalid issuer");
+            throw oauth2Error("Invalid issuer");
         }
 
         if (jwt.getAudience() == null || !jwt.getAudience().contains(EXPECTED_AUD)) {
-            throw oauth2Error("invalid_token", "Invalid audience");
+            throw oauth2Error("Invalid audience");
         }
 
         String jti = jwt.getId();
         if (jti != null && revokedTokenService.isRevoked(jti)) {
-            throw oauth2Error("invalid_token", "Token revoked");
+            throw oauth2Error("Token revoked");
         }
 
         Collection<GrantedAuthority> authorities = extractAuthoritiesFromClaims(jwt);
@@ -74,8 +75,8 @@ public class JwtAuthConverter implements Converter<Jwt, JwtAuthenticationToken> 
         return authStrings.stream().map(SimpleGrantedAuthority::new).collect(Collectors.toList());
     }
 
-    private OAuth2AuthenticationException oauth2Error(String errorCode, String description) {
-        OAuth2Error err = new OAuth2Error(errorCode, description, null);
+    private OAuth2AuthenticationException oauth2Error(String description) {
+        OAuth2Error err = new OAuth2Error("invalid_token", description, null);
         return new OAuth2AuthenticationException(err);
     }
 }

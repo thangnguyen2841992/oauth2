@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: 8081
 
 spring:
   data:
@@ -10,4 +10,17 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          jwk-set-uri: https://auth.example.com/.well-known/jwks.json
+          jwk-set-uri: http://localhost:8080/realms/myrealm/protocol/openid-connect/certs
+
+  datasource:
+    url: jdbc:mysql://db-host:3306/japanese?useSSL=false&serverTimezone=UTC
+    username: root
+    password: thuthuyda1
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate   # hoặc update/create/drop tùy môi trường
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
