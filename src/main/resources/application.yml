@@ -1,26 +1,36 @@
 server:
   port: 8081
 
-spring:
-  data:
-    redis:
-      url: redis://localhost:6379
+thymeleaf:
+cache: false
 
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          jwk-set-uri: http://localhost:8080/realms/myrealm/protocol/openid-connect/certs
+spring:
+security:
+oauth2:
+client:
+  registration:
+    keycloak:
+    client-id: nihongo
+    client-secret: "SGqG0tmiAji9SkNPSaLoL8FFMiLOieMm"
+    authorization-grant-type: authorization_code
+    redirect-uri: "http://localhost:8081/login/oauth2/code/keycloak"
+    scope:
+      - openid
+      - profile
+      - email
+  provider:
+    keycloak:
+    issuer-uri: "http://localhost:8180/realms/nihongo"
 
   datasource:
-    url: jdbc:mysql://db-host:3306/japanese?useSSL=false&serverTimezone=UTC
+    url: jdbc:mysql://localhost:3306/nihongo?useSSL=false&serverTimezone=UTC
     username: root
     password: thuthuyda1
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
     hibernate:
-      ddl-auto: validate   # hoặc update/create/drop tùy môi trường
+      ddl-auto: update   # hoặc update/create/drop tùy môi trường
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MySQLDialect
