@@ -5,25 +5,25 @@ thymeleaf:
 cache: false
 
 spring:
-security:
-oauth2:
-client:
-  registration:
-    keycloak:
-    client-id: nihongo-client
-    client-secret: "iDU0hx4ysRcik9RzjOMRz9w6htIPeWLQ"
-    authorization-grant-type: authorization_code
-    redirect-uri: "http://localhost:8081/login/oauth2/code/keycloak"
-    scope:
-      - openid
-      - profile
-      - email
-  provider:
-    keycloak:
-    issuer-uri: "http://localhost:8180/realms/nihongo"
+#security:
+#oauth2:
+#client:
+#  registration:
+#    keycloak:
+#    client-id: nihongo-client
+#    client-secret: "iDU0hx4ysRcik9RzjOMRz9w6htIPeWLQ"
+#    authorization-grant-type: authorization_code
+#    redirect-uri: "http://localhost:8081/login/oauth2/code/keycloak"
+#    scope:
+#      - openid
+#      - profile
+#      - email
+#  provider:
+#    keycloak:
+#    issuer-uri: "http://localhost:8180/realms/nihongo"
 
   datasource:
-    url: jdbc:mysql://localhost:3306/nihongo?useSSL=false&serverTimezone=UTC
+    url: jdbc:mysql://localhost:3306/nihongo?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
     username: root
     password: thuthuyda1
     driver-class-name: com.mysql.cj.jdbc.Driver
