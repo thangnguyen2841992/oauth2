@@ -1,13 +1,14 @@
 package com.thang.user.service.user;
 
-import com.thang.user.model.User;
+import com.thang.user.model.dto.UserDTO;
+import com.thang.user.model.entity.User;
 
 import java.util.List;
-import java.util.Optional;
 
 public interface IUserService {
-    List<User> getAllUsers();
-    void addUser(User user);
-    User findByUsername(String username);
-    User findByEmail(String email);
+    UserDTO createUser(UserDTO dto);
+    List<UserDTO> getAllUsers();
+    UserDTO getUserById(Long id);
+    UserDTO updateUser(Long id, UserDTO dto);
+    void deleteUser(Long id);
 }

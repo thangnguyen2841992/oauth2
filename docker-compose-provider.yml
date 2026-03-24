@@ -10,3 +10,6 @@ services:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
     command: start-dev
+
+
+#    docker compose -f .\docker-compose-provider.yml up -d

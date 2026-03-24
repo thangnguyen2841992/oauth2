@@ -10,8 +10,8 @@ oauth2:
 client:
   registration:
     keycloak:
-    client-id: nihongo
-    client-secret: "SGqG0tmiAji9SkNPSaLoL8FFMiLOieMm"
+    client-id: nihongo-client
+    client-secret: "iDU0hx4ysRcik9RzjOMRz9w6htIPeWLQ"
     authorization-grant-type: authorization_code
     redirect-uri: "http://localhost:8081/login/oauth2/code/keycloak"
     scope:
@@ -30,7 +30,13 @@ client:
 
   jpa:
     hibernate:
-      ddl-auto: update   # hoặc update/create/drop tùy môi trường
+      ddl-auto: update
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MySQLDialect
+
+  idp:
+    url: http://localhost:8180
+    client-id: japanese_app
+    client-secret: pqdSBRdyDoAUTNBmXQcjoQpWhCL4a36R
+    realm: nihongo
