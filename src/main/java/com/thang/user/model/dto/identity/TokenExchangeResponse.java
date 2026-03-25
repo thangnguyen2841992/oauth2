@@ -13,8 +13,8 @@ import com.fasterxml.jackson.databind.annotation.JsonNaming;
 public class TokenExchangeResponse {
     String access_token;
     String refresh_token;
-    String expires_in;
-    String refresh_expires_in;
+    long expires_in;
+    long refresh_expires_in;
     String scope;
     String token_type;
     String id_token;
