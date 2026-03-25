@@ -2,8 +2,8 @@ package com.thang.user.model.dto.identity;
 
 
 import lombok.*;
-import tools.jackson.databind.PropertyNamingStrategies;
-import tools.jackson.databind.annotation.JsonNaming;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 
 @Getter
 @Setter
@@ -12,8 +12,8 @@ import tools.jackson.databind.annotation.JsonNaming;
 @Builder
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public class TokenExchangeParam {
-     String clientId;
-     String clientSecret;
-     String grantType;
+     String client_id;
+     String client_secret;
+     String grant_type;
      String scope;
 }

@@ -9,9 +9,7 @@ import lombok.Setter;
 @NoArgsConstructor
 @Getter
 @Setter
-public class UserDTO {
-    private long id;
-    private String userId;
+public class CreateUserRequest {
     private String username;
     private String password;
     private String firstName;
@@ -20,9 +18,4 @@ public class UserDTO {
     private String email;
     private String phoneNumber;
     private String address;
-
-    //    @Column(unique = true, nullable = false)
-//    private String plainTextDEK;
-    private String dateCreated;
-    private String dateModified;
 }

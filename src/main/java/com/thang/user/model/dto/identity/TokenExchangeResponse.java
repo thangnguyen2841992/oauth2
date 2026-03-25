@@ -1,21 +1,21 @@
 package com.thang.user.model.dto.identity;
 
 import lombok.*;
-import tools.jackson.databind.PropertyNamingStrategies;
-import tools.jackson.databind.PropertyNamingStrategy;
-import tools.jackson.databind.annotation.JsonNaming;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+//@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public class TokenExchangeResponse {
-    String accessToken;
-    String expiresIn;
-    String refreshExpiresIn;
+    String access_token;
+    String refresh_token;
+    String expires_in;
+    String refresh_expires_in;
     String scope;
-    String tokenType;
-    String idToken;
+    String token_type;
+    String id_token;
 }

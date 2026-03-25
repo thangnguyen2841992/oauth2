@@ -1,9 +1,31 @@
 package com.thang.user.controller;
 
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import com.thang.user.model.dto.CreateUserRequest;
+import com.thang.user.model.dto.UserDTO;
+import com.thang.user.service.user.IUserService;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/users")
+@CrossOrigin("*")
 public class UserRestController {
+    private final IUserService userService;
+
+    public UserRestController(IUserService userService) {
+        this.userService = userService;
+    }
+
+    @PostMapping()
+    public ResponseEntity<UserDTO> createUser(@RequestBody CreateUserRequest user) {
+        UserDTO userDTO = userService.createUser(user);
+        return new ResponseEntity<>(userDTO, HttpStatus.CREATED);
+    }
+
+    @DeleteMapping("/{userId}")
+    public ResponseEntity<?> deleteUser(@PathVariable String userId) {
+        this.userService.deleteUser(userId);
+        return new ResponseEntity<>(HttpStatus.OK);
+    }
 }

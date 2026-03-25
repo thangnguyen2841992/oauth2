@@ -1,20 +1,17 @@
 package com.thang.user.service.user;
 
+import com.thang.user.model.dto.CreateUserRequest;
+import com.thang.user.model.dto.LoginRequest;
 import com.thang.user.model.dto.UserDTO;
-import com.thang.user.model.dto.identity.Credentials;
-import com.thang.user.model.dto.identity.TokenExchangeParam;
-import com.thang.user.model.dto.identity.UserCreationParam;
+import com.thang.user.model.dto.identity.*;
 import com.thang.user.model.entity.User;
 import com.thang.user.repository.IUserRepository;
 import com.thang.user.repository.IdentityClient;
 import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.security.autoconfigure.SecurityProperties;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -49,14 +46,15 @@ public class UserServiceImpl implements IUserService {
 
 
     @Override
-    public UserDTO createUser(UserDTO dto) {
-        var token = identityClient.exchangeClientToken(TokenExchangeParam.builder().grantType("client_credentials")
-                .clientSecret(clientSecret)
-                .clientId(clientId)
+    public UserDTO createUser(CreateUserRequest dto) {
+        var token = identityClient.exchangeClientToken(TokenExchangeParam.builder()
+                .grant_type("client_credentials")
+                .client_secret(clientSecret)
+                .client_id(clientId)
                 .scope("openid")
                 .build());
 
-        log.info("Token info: ", token);
+        log.info("Token info: ", token.getAccess_token());
         var creationResponse = identityClient.createNewUser(UserCreationParam.builder()
                 .username(dto.getUsername())
                 .firstName(dto.getFirstName())
@@ -69,11 +67,11 @@ public class UserServiceImpl implements IUserService {
                         .type("password")
                         .temporary(false)
                         .build()))
-                .build(), "Bearer " + token.getAccessToken());
+                .build(), "Bearer " + token.getAccess_token());
         String userId = extractUserId(creationResponse);
         log.info("User created: ", userId);
         User user = new User();
-//        user.setUserId(dto.getUserId());
+        user.setUserId(userId);
         user.setUsername(dto.getUsername());
         user.setFirstName(dto.getFirstName());
         user.setLastName(dto.getLastName());
@@ -84,11 +82,7 @@ public class UserServiceImpl implements IUserService {
         user.setDateCreated(new Date());
         user.setDateModified(new Date());
         User newUser = this.userRepository.save(user);
-        dto.setId(newUser.getId());
-        dto.setUserId(userId);
-        dto.setDateCreated(toIsoDateStringVn(user.getDateCreated()));
-        dto.setDateModified(toIsoDateStringVn(user.getDateModified()));
-        return dto;
+        return mapperUserToUserDTO(newUser);
     }
 
     @Override
@@ -96,18 +90,7 @@ public class UserServiceImpl implements IUserService {
         List<User> users = this.userRepository.findAll();
         List<UserDTO> dtos = new ArrayList<>();
         for (User user : users) {
-            UserDTO dto = new UserDTO();
-            dto.setUsername(user.getUsername());
-            dto.setFirstName(user.getFirstName());
-            dto.setLastName(user.getLastName());
-            dto.setPhoneNumber(user.getPhoneNumber());
-            dto.setAddress(user.getAddress());
-            dto.setEmail(user.getEmail());
-            dto.setId(user.getId());
-            dto.setDateCreated(toIsoDateStringVn(user.getDateCreated()));
-            dto.setDateModified(toIsoDateStringVn(user.getDateModified()));
-            dto.setUserId(user.getUserId());
-            dto.setDateOfBirth(toIsoDateStringVn(user.getDateOfBirth()));
+            UserDTO dto = mapperUserToUserDTO(user);
             dtos.add(dto);
         }
         return dtos;
@@ -118,17 +101,7 @@ public class UserServiceImpl implements IUserService {
         Optional<User> user = this.userRepository.findById(id);
         UserDTO dto = new UserDTO();
         if (user.isPresent()) {
-            dto.setUsername(user.get().getUsername());
-            dto.setFirstName(user.get().getFirstName());
-            dto.setLastName(user.get().getLastName());
-            dto.setPhoneNumber(user.get().getPhoneNumber());
-            dto.setAddress(user.get().getAddress());
-            dto.setEmail(user.get().getEmail());
-            dto.setId(user.get().getId());
-            dto.setDateCreated(toIsoDateStringVn(user.get().getDateCreated()));
-            dto.setDateModified(toIsoDateStringVn(user.get().getDateModified()));
-            dto.setUserId(user.get().getUserId());
-            dto.setDateOfBirth(toIsoDateStringVn(user.get().getDateOfBirth()));
+            dto = mapperUserToUserDTO(user.get());
         }
         return dto;
     }
@@ -139,8 +112,30 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
-    public void deleteUser(Long id) {
+    public void deleteUser(String userId) {
+        Optional<User> user = this.userRepository.findByUserId(userId);
+        if (user.isPresent()) {
+            var token = identityClient.exchangeClientToken(TokenExchangeParam.builder()
+                    .grant_type("client_credentials")
+                    .client_secret(clientSecret)
+                    .client_id(clientId)
+                    .scope("openid")
+                    .build());
+            this.identityClient.deleteUser(user.get().getUserId(), "Bearer " + token.getAccess_token());
+            this.userRepository.deleteById(user.get().getId());
+        }
+    }
 
+    @Override
+    public TokenExchangeResponse login(LoginRequest loginRequest) {
+        return identityClient.login(LoginUsingKeyCloakParam.builder()
+                .grant_type("client_credentials")
+                .client_secret(clientSecret)
+                .client_id(clientId)
+                .scope("openid")
+                .username(loginRequest.getUsername())
+                .password(loginRequest.getPassword())
+                .build());
     }
 
     private Date formatDateFromStringToDate(String date) {
@@ -166,5 +161,21 @@ public class UserServiceImpl implements IUserService {
         String location = locations.get(0);
         String[] split = location.split("/");
         return split[split.length - 1];
+    }
+
+    private UserDTO mapperUserToUserDTO(User user) {
+        UserDTO dto = new UserDTO();
+        dto.setUsername(user.getUsername());
+        dto.setFirstName(user.getFirstName());
+        dto.setLastName(user.getLastName());
+        dto.setPhoneNumber(user.getPhoneNumber());
+        dto.setAddress(user.getAddress());
+        dto.setEmail(user.getEmail());
+        dto.setId(user.getId());
+        dto.setDateCreated(toIsoDateStringVn(user.getDateCreated()));
+        dto.setDateModified(toIsoDateStringVn(user.getDateModified()));
+        dto.setUserId(user.getUserId());
+        dto.setDateOfBirth(toIsoDateStringVn(user.getDateOfBirth()));
+        return dto;
     }
 }
