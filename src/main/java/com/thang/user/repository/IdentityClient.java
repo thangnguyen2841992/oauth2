@@ -1,12 +1,7 @@
 package com.thang.user.repository;
 
-import com.thang.user.model.dto.identity.LoginUsingKeyCloakParam;
-import com.thang.user.model.dto.identity.TokenExchangeParam;
-import com.thang.user.model.dto.identity.TokenExchangeResponse;
-import com.thang.user.model.dto.identity.UserCreationParam;
-import feign.Body;
+import com.thang.user.model.dto.identity.*;
 import feign.QueryMap;
-import jakarta.annotation.PostConstruct;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -32,7 +27,7 @@ public interface IdentityClient {
     @PostMapping(value = "/realms/${spring.idp.realm}/protocol/openid-connect/token",
             consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE
     )
-    TokenExchangeResponse login(@QueryMap() LoginUsingKeyCloakParam param);
+    TokenUserResponse login(@QueryMap() LoginUsingKeyCloakParam param);
 
 
 }
