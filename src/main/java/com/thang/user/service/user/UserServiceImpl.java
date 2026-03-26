@@ -138,6 +138,17 @@ public class UserServiceImpl implements IUserService {
                 .build());
     }
 
+    @Override
+    public UserKeyCloakResponse getAllUsersKeyCloak() {
+        var token = identityClient.exchangeClientToken(TokenExchangeParam.builder()
+                .grant_type("client_credentials")
+                .client_secret(clientSecret)
+                .client_id(clientId)
+                .scope("openid")
+                .build());
+        return this.identityClient.getAllUsersKeyCloak("Bearer " + token.getAccess_token());
+    }
+
     private Date formatDateFromStringToDate(String date) {
         LocalDate localDate = LocalDate.parse(date);
         Instant instant = localDate.atStartOfDay(ZoneId.systemDefault()).toInstant();

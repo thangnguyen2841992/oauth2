@@ -5,6 +5,7 @@ import com.thang.user.model.dto.LoginRequest;
 import com.thang.user.model.dto.UserDTO;
 import com.thang.user.model.dto.identity.TokenExchangeResponse;
 import com.thang.user.model.dto.identity.TokenUserResponse;
+import com.thang.user.model.dto.identity.UserKeyCloakResponse;
 import com.thang.user.model.entity.User;
 
 import java.util.List;
@@ -17,4 +18,6 @@ public interface IUserService {
     void deleteUser(String userId);
 
     TokenUserResponse login(LoginRequest loginRequest);
+
+    UserKeyCloakResponse getAllUsersKeyCloak();
 }

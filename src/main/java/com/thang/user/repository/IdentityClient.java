@@ -30,4 +30,7 @@ public interface IdentityClient {
     TokenUserResponse login(@QueryMap() LoginUsingKeyCloakParam param);
 
 
+    @GetMapping(value = "/realms/${spring.idp.realm}/protocol/openid-connect/userinfo")
+    UserKeyCloakResponse getAllUsersKeyCloak(@RequestHeader("authorization") String token);
+
 }

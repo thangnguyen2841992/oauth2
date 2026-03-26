@@ -28,4 +28,9 @@ public class UserRestController {
         this.userService.deleteUser(userId);
         return new ResponseEntity<>(HttpStatus.OK);
     }
+
+    @GetMapping("/getAllUsersKeyCloak")
+    public ResponseEntity<?> getAllUsersKeyCloak() {
+        return new ResponseEntity<>(userService.getAllUsersKeyCloak(), HttpStatus.OK);
+    }
 }
