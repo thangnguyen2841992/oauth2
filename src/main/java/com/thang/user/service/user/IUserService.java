@@ -19,5 +19,5 @@ public interface IUserService {
 
     TokenUserResponse login(LoginRequest loginRequest);
 
-    UserKeyCloakResponse getAllUsersKeyCloak();
+    List<UserKeyCloakResponse> getAllUsersKeyCloak();
 }

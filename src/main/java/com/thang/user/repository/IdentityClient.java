@@ -7,6 +7,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @FeignClient(name = "identity-client", url = "${spring.idp.url}")
 public interface IdentityClient {
 
@@ -30,7 +32,7 @@ public interface IdentityClient {
     TokenUserResponse login(@QueryMap() LoginUsingKeyCloakParam param);
 
 
-    @GetMapping(value = "/realms/${spring.idp.realm}/protocol/openid-connect/userinfo")
-    UserKeyCloakResponse getAllUsersKeyCloak(@RequestHeader("authorization") String token);
+    @GetMapping(value = "/admin/realms/${spring.idp.realm}/users?exact=false")
+    List<UserKeyCloakResponse> getAllUsersKeyCloak(@RequestHeader("authorization") String token);
 
 }

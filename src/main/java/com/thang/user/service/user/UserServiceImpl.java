@@ -139,7 +139,7 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
-    public UserKeyCloakResponse getAllUsersKeyCloak() {
+    public List<UserKeyCloakResponse> getAllUsersKeyCloak() {
         var token = identityClient.exchangeClientToken(TokenExchangeParam.builder()
                 .grant_type("client_credentials")
                 .client_secret(clientSecret)

@@ -8,9 +8,16 @@ import lombok.*;
 @Setter
 @Builder
 public class UserKeyCloakResponse {
-    String sub;
+    String id;
 
-    String email_verified;
+    String username;
 
-    String preferred_username;
+    String emailVerified;
+    String createdTimestamp;
+    String enabled;
+    String totp;
+//    String disableableCredentialTypes;
+    String notBefore;
+
+    Access access;
 }
