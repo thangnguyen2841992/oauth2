@@ -127,15 +127,26 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
-    public TokenExchangeResponse login(LoginRequest loginRequest) {
+    public TokenUserResponse login(LoginRequest loginRequest) {
         return identityClient.login(LoginUsingKeyCloakParam.builder()
-                .grant_type("client_credentials")
+                .grant_type("password")
                 .client_secret(clientSecret)
                 .client_id(clientId)
                 .scope("openid")
                 .username(loginRequest.getUsername())
                 .password(loginRequest.getPassword())
                 .build());
+    }
+
+    @Override
+    public UserKeyCloakResponse getAllUsersKeyCloak() {
+        var token = identityClient.exchangeClientToken(TokenExchangeParam.builder()
+                .grant_type("client_credentials")
+                .client_secret(clientSecret)
+                .client_id(clientId)
+                .scope("openid")
+                .build());
+        return this.identityClient.getAllUsersKeyCloak("Bearer " + token.getAccess_token());
     }
 
     private Date formatDateFromStringToDate(String date) {

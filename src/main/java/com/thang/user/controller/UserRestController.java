@@ -8,7 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/users")
+@RequestMapping("/api/users")
 @CrossOrigin("*")
 public class UserRestController {
     private final IUserService userService;
@@ -27,5 +27,10 @@ public class UserRestController {
     public ResponseEntity<?> deleteUser(@PathVariable String userId) {
         this.userService.deleteUser(userId);
         return new ResponseEntity<>(HttpStatus.OK);
+    }
+
+    @GetMapping("/getAllUsersKeyCloak")
+    public ResponseEntity<?> getAllUsersKeyCloak() {
+        return new ResponseEntity<>(userService.getAllUsersKeyCloak(), HttpStatus.OK);
     }
 }
