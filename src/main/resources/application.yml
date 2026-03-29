@@ -19,17 +19,17 @@ spring:
   idp:
     url: http://localhost:8180
     client-id: japanese_app
-    client-secret: pqdSBRdyDoAUTNBmXQcjoQpWhCL4a36R
+    client-secret: sawhOBfAfp6pzKVGVxreMvlTcMxFmzXN
     realm: nihongo
 
 eureka:
   instance:
     prefer-ip-address: true
   client:
+    register-with-eureka: true
+    fetch-registry: true
     service-url:
       defaultZone: http://localhost:8761/eureka
-      register-with-eureka: true
-      fetch-registry: true
 
 api:
   key: thangdeptrai
