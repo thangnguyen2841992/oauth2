@@ -43,4 +43,7 @@ public interface IdentityClient {
     @GetMapping(value = "/admin/realms/${spring.idp.realm}/clients/{clientUUID}/roles/{roleName}")
     GetRoleIdResponse getRoleId(@RequestHeader("authorization") String token, @PathVariable String clientUUID, @PathVariable String roleName);
 
+    @PostMapping(value = "/admin/realms/${spring.idp.realm}/users/{userId}/role-mappings/clients/{clientUUID}")
+    GetRoleIdResponse mappingRoleToUser(@RequestHeader("authorization") String token, @PathVariable String userId, @PathVariable String clientUUID, @RequestBody List<GetRoleIdResponse> roles);
+
 }

@@ -30,4 +30,5 @@ public class User {
 //    private String plainTextDEK;
     private Date dateCreated;
     private Date dateModified;
+    private String roleName;
 }

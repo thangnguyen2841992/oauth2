@@ -20,6 +20,7 @@ public class UserDTO {
     private String email;
     private String phoneNumber;
     private String address;
+    private String roleName;
 
     //    @Column(unique = true, nullable = false)
 //    private String plainTextDEK;

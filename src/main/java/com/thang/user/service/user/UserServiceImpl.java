@@ -10,6 +10,7 @@ import com.thang.user.repository.IdentityClient;
 import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
@@ -27,6 +28,7 @@ public class UserServiceImpl implements IUserService {
     private final TokenCacheService tokenCacheService;
     private final ClientUuidCacheService clientUuidCacheService;
     private final RoleCacheService roleCacheService;
+    private final RedisTemplate<String, String> redisTemplate;
 
     @Value("${spring.idp.client-id}")
     @NonFinal
@@ -36,12 +38,13 @@ public class UserServiceImpl implements IUserService {
     @NonFinal
     private String clientSecret;
 
-    public UserServiceImpl(IUserRepository userRepository, IdentityClient identityClient, TokenCacheService tokenCacheService, ClientUuidCacheService clientUuidCacheService, RoleCacheService roleCacheService) {
+    public UserServiceImpl(IUserRepository userRepository, IdentityClient identityClient, TokenCacheService tokenCacheService, ClientUuidCacheService clientUuidCacheService, RoleCacheService roleCacheService, RedisTemplate<String, String> redisTemplate) {
         this.userRepository = userRepository;
         this.identityClient = identityClient;
         this.tokenCacheService = tokenCacheService;
         this.clientUuidCacheService = clientUuidCacheService;
         this.roleCacheService = roleCacheService;
+        this.redisTemplate = redisTemplate;
     }
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
@@ -67,6 +70,17 @@ public class UserServiceImpl implements IUserService {
                         .build()))
                 .build(), "Bearer " + token);
         String userId = extractUserId(creationResponse);
+        String clientUUID = clientUuidCacheService
+                .getAllClientUuid()
+                .get(clientId);
+        getRoleId("USER");
+        Object role = redisTemplate.opsForHash().get("KEYCLOAK_ROLES", "USER");
+        List<GetRoleIdResponse> roles = new  ArrayList<>();
+        GetRoleIdResponse roleParam = new GetRoleIdResponse();
+        roleParam.setId(role.toString());
+        roleParam.setName("USER");
+        roles.add(roleParam);
+        this.identityClient.mappingRoleToUser("Bearer " + token, userId, clientUUID, roles );
         log.info("User created: ", userId);
         User user = new User();
         user.setUserId(userId);

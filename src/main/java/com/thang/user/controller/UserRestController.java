@@ -18,12 +18,7 @@ public class UserRestController {
         this.userService = userService;
     }
 
-    @PostMapping()
-    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
-    public ResponseEntity<UserDTO> createUser(@RequestBody CreateUserRequest user) {
-        UserDTO userDTO = userService.createUser(user);
-        return new ResponseEntity<>(userDTO, HttpStatus.CREATED);
-    }
+
 
     @DeleteMapping("/{userId}")
     @PreAuthorize("hasAnyRole('ADMIN')")
