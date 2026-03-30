@@ -37,4 +37,6 @@ public class UserRestController {
     public ResponseEntity<?> getAllUsersKeyCloak() {
         return new ResponseEntity<>(userService.getAllUsersKeyCloak(), HttpStatus.OK);
     }
+
+
 }

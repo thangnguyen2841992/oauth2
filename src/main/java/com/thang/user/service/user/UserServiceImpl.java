@@ -17,16 +17,16 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 @Service
 @Slf4j
 public class UserServiceImpl implements IUserService {
     private final IUserRepository userRepository;
     private final IdentityClient identityClient;
+    private final TokenCacheService tokenCacheService;
+    private final ClientUuidCacheService clientUuidCacheService;
+    private final RoleCacheService roleCacheService;
 
     @Value("${spring.idp.client-id}")
     @NonFinal
@@ -36,9 +36,12 @@ public class UserServiceImpl implements IUserService {
     @NonFinal
     private String clientSecret;
 
-    public UserServiceImpl(IUserRepository userRepository, IdentityClient identityClient) {
+    public UserServiceImpl(IUserRepository userRepository, IdentityClient identityClient, TokenCacheService tokenCacheService, ClientUuidCacheService clientUuidCacheService, RoleCacheService roleCacheService) {
         this.userRepository = userRepository;
         this.identityClient = identityClient;
+        this.tokenCacheService = tokenCacheService;
+        this.clientUuidCacheService = clientUuidCacheService;
+        this.roleCacheService = roleCacheService;
     }
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
@@ -47,14 +50,9 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     public UserDTO createUser(CreateUserRequest dto) {
-        var token = identityClient.exchangeClientToken(TokenExchangeParam.builder()
-                .grant_type("client_credentials")
-                .client_secret(clientSecret)
-                .client_id(clientId)
-                .scope("openid")
-                .build());
+        var token = tokenCacheService.getClientToken();
 
-        log.info("Token info: ", token.getAccess_token());
+        log.info("Token info: ", token);
         var creationResponse = identityClient.createNewUser(UserCreationParam.builder()
                 .username(dto.getUsername())
                 .firstName(dto.getFirstName())
@@ -67,7 +65,7 @@ public class UserServiceImpl implements IUserService {
                         .type("password")
                         .temporary(false)
                         .build()))
-                .build(), "Bearer " + token.getAccess_token());
+                .build(), "Bearer " + token);
         String userId = extractUserId(creationResponse);
         log.info("User created: ", userId);
         User user = new User();
@@ -115,13 +113,8 @@ public class UserServiceImpl implements IUserService {
     public void deleteUser(String userId) {
         Optional<User> user = this.userRepository.findByUserId(userId);
         if (user.isPresent()) {
-            var token = identityClient.exchangeClientToken(TokenExchangeParam.builder()
-                    .grant_type("client_credentials")
-                    .client_secret(clientSecret)
-                    .client_id(clientId)
-                    .scope("openid")
-                    .build());
-            this.identityClient.deleteUser(user.get().getUserId(), "Bearer " + token.getAccess_token());
+            var token = tokenCacheService.getClientToken();
+            this.identityClient.deleteUser(user.get().getUserId(), "Bearer " + token);
             this.userRepository.deleteById(user.get().getId());
         }
     }
@@ -140,13 +133,18 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     public List<UserKeyCloakResponse> getAllUsersKeyCloak() {
-        var token = identityClient.exchangeClientToken(TokenExchangeParam.builder()
-                .grant_type("client_credentials")
-                .client_secret(clientSecret)
-                .client_id(clientId)
-                .scope("openid")
-                .build());
-        return this.identityClient.getAllUsersKeyCloak("Bearer " + token.getAccess_token());
+        var token = tokenCacheService.getClientToken();
+        return this.identityClient.getAllUsersKeyCloak("Bearer " + token);
+    }
+
+    @Override
+    public Map<String, String> getUuidClient() {
+        return this.clientUuidCacheService.getAllClientUuid();
+    }
+
+    @Override
+    public String getRoleId(String roleName) {
+        return this.roleCacheService.getRoleId(roleName);
     }
 
     private Date formatDateFromStringToDate(String date) {

@@ -1,7 +1,6 @@
 package com.thang.user.controller;
 
 import com.thang.user.model.dto.LoginRequest;
-import com.thang.user.model.dto.identity.TokenExchangeResponse;
 import com.thang.user.model.dto.identity.TokenUserResponse;
 import com.thang.user.service.user.IUserService;
 import org.springframework.http.HttpStatus;
@@ -22,6 +21,16 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<TokenUserResponse> login(@RequestBody LoginRequest loginRequest) {
         return new ResponseEntity<>(this.userService.login(loginRequest), HttpStatus.OK);
+    }
+
+    @GetMapping("/getUUIDClient")
+    public ResponseEntity<?> getUUIDClient() {
+        return new ResponseEntity<>(userService.getUuidClient(), HttpStatus.OK);
+    }
+
+    @GetMapping("/getRoleId/{roleName}")
+    public ResponseEntity<?> getRoleId(@PathVariable String roleName) {
+        return new ResponseEntity<>(userService.getRoleId(roleName), HttpStatus.OK);
     }
 
 }

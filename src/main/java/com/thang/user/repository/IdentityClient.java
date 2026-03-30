@@ -35,4 +35,12 @@ public interface IdentityClient {
     @GetMapping(value = "/admin/realms/${spring.idp.realm}/users?exact=false")
     List<UserKeyCloakResponse> getAllUsersKeyCloak(@RequestHeader("authorization") String token);
 
+
+    @GetMapping(value = "/admin/realms/${spring.idp.realm}/clients?clientId=${spring.idp.client-id}")
+    List<GetUuidClientResponse> getUuidClient(@RequestHeader("authorization") String token);
+
+
+    @GetMapping(value = "/admin/realms/${spring.idp.realm}/clients/{clientUUID}/roles/{roleName}")
+    GetRoleIdResponse getRoleId(@RequestHeader("authorization") String token, @PathVariable String clientUUID, @PathVariable String roleName);
+
 }

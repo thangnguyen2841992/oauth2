@@ -33,3 +33,6 @@ eureka:
 
 api:
   key: thangdeptrai
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
