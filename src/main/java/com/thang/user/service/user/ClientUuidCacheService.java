@@ -35,7 +35,24 @@ public class ClientUuidCacheService {
                     ));
         }
 
-        var token = tokenCacheService.getClientToken();
+        String token = tokenCacheService.getClientToken();
+
+        try {
+            return fetchAndCache(token);
+        } catch (feign.FeignException.Forbidden e) {
+
+            // 🔥 1. Token có vấn đề → clear cache
+            tokenCacheService.evictToken();
+
+            // 🔥 2. Lấy token mới
+            String newToken = tokenCacheService.getClientToken();
+
+            // 🔥 3. Retry
+            return fetchAndCache(newToken);
+        }
+    }
+    private Map<String, String> fetchAndCache(String token) {
+
         var response = identityClient.getUuidClient("Bearer " + token);
 
         Map<String, String> map = response.stream()

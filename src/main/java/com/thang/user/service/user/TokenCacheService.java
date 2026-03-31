@@ -64,4 +64,8 @@ public class TokenCacheService {
             return accessToken;
         }
     }
+    public void evictToken() {
+        redisTemplate.delete("KEYCLOAK_CLIENT_TOKEN");
+    }
+
 }

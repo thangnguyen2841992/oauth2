@@ -93,6 +93,7 @@ public class UserServiceImpl implements IUserService {
         user.setDateOfBirth(formatDateFromStringToDate(dto.getDateOfBirth()));
         user.setDateCreated(new Date());
         user.setDateModified(new Date());
+        user.setRoleName("USER");
         User newUser = this.userRepository.save(user);
         return mapperUserToUserDTO(newUser);
     }
@@ -199,6 +200,7 @@ public class UserServiceImpl implements IUserService {
         dto.setDateModified(toIsoDateStringVn(user.getDateModified()));
         dto.setUserId(user.getUserId());
         dto.setDateOfBirth(toIsoDateStringVn(user.getDateOfBirth()));
+        dto.setRoleName(user.getRoleName());
         return dto;
     }
 }
