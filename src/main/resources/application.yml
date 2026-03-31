@@ -28,6 +28,15 @@ spring:
         jwt:
           issuer-uri: http://localhost:8180/realms/nihongo
 
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      acks: all
+      enable-idempotence: true
+      retries: 5
+      max-in-flight-requests-per-connection: 1
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
 eureka:
   instance:
     prefer-ip-address: true
