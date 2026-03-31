@@ -2,6 +2,7 @@ package com.thang.user.service.user;
 
 import com.thang.user.model.dto.CreateUserRequest;
 import com.thang.user.model.dto.LoginRequest;
+import com.thang.user.model.dto.MessageResponseUser;
 import com.thang.user.model.dto.UserDTO;
 import com.thang.user.model.dto.identity.*;
 import com.thang.user.model.entity.User;
@@ -9,9 +10,11 @@ import com.thang.user.repository.IUserRepository;
 import com.thang.user.repository.IdentityClient;
 import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.ResponseEntity;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -29,6 +32,8 @@ public class UserServiceImpl implements IUserService {
     private final ClientUuidCacheService clientUuidCacheService;
     private final RoleCacheService roleCacheService;
     private final RedisTemplate<String, String> redisTemplate;
+    private final KafkaTemplate<String, Object> kafkaTemplate;
+
 
     @Value("${spring.idp.client-id}")
     @NonFinal
@@ -38,13 +43,14 @@ public class UserServiceImpl implements IUserService {
     @NonFinal
     private String clientSecret;
 
-    public UserServiceImpl(IUserRepository userRepository, IdentityClient identityClient, TokenCacheService tokenCacheService, ClientUuidCacheService clientUuidCacheService, RoleCacheService roleCacheService, RedisTemplate<String, String> redisTemplate) {
+    public UserServiceImpl(IUserRepository userRepository, IdentityClient identityClient, TokenCacheService tokenCacheService, ClientUuidCacheService clientUuidCacheService, RoleCacheService roleCacheService, RedisTemplate<String, String> redisTemplate, KafkaTemplate<String, Object> kafkaTemplate) {
         this.userRepository = userRepository;
         this.identityClient = identityClient;
         this.tokenCacheService = tokenCacheService;
         this.clientUuidCacheService = clientUuidCacheService;
         this.roleCacheService = roleCacheService;
         this.redisTemplate = redisTemplate;
+        this.kafkaTemplate = kafkaTemplate;
     }
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
@@ -161,6 +167,29 @@ public class UserServiceImpl implements IUserService {
     public String getRoleId(String roleName) {
         return this.roleCacheService.getRoleId(roleName);
     }
+
+    @Override
+    public String activeUser(String userId, String activeCode) {
+        Optional<User> userOptional = this.userRepository.findByUserId(userId);
+//        if (userOptional.isPresent()) {
+//            User user = userOptional.get();
+//            if (activeCode.equals(user.getCodeActive())) {
+//                if (user.isActive()) {
+//                    return "Tài khoản đã được kích hoạt!";
+//                } else {
+//                    user.setActive(true);
+//                    this.userRepository.save(user);
+                    MessageResponseUser messageResponseUser = new MessageResponseUser();
+                    messageResponseUser.setToUserEmail("nguyenthang28419902@gmail.com");
+                    messageResponseUser.setToUserName("thang2842");
+                    messageResponseUser.setToUserFullName("Nguyễn Thắng");
+                    messageResponseUser.setToUserId("test");
+                    kafkaTemplate.send("send-email-active-response", messageResponseUser);
+                    return "Kích hoạt tài khoản thành công!";
+//        }
+//        return "Tài khoản không tồn tại!";
+    }
+
 
     private Date formatDateFromStringToDate(String date) {
         LocalDate localDate = LocalDate.parse(date);

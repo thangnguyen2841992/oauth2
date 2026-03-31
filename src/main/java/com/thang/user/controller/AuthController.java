@@ -41,5 +41,9 @@ public class AuthController {
         UserDTO userDTO = userService.createUser(user);
         return new ResponseEntity<>(userDTO, HttpStatus.CREATED);
     }
+    @PostMapping("/testSendEmail")
+    public ResponseEntity<?> testSendEmail() {
+        return new ResponseEntity<>(this.userService.activeUser("test", "test"), HttpStatus.OK);
+    }
 
 }

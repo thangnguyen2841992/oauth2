@@ -25,4 +25,5 @@ public interface IUserService {
 
     Map<String, String> getUuidClient();
     String getRoleId(String roleName);
+    String activeUser(String userId, String activeCode);
 }
