@@ -34,4 +34,5 @@ public class User {
     private String roleName;
     private boolean isActive;
     private String codeActive;
+    private Date codeActiveExpiredAt;
 }

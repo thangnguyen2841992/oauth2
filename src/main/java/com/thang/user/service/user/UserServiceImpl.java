@@ -75,6 +75,7 @@ public class UserServiceImpl implements IUserService {
         // 3. Tạo activation token
         String activeCode = createActiveCode();
 
+
         // 4. Lưu DB (CHƯA ACTIVE)
         User user = new User();
         user.setUsername(dto.getUsername());
@@ -84,6 +85,7 @@ public class UserServiceImpl implements IUserService {
         user.setPassword(encodedPassword);
         user.setActive(false);
         user.setCodeActive(activeCode);
+        user.setCodeActiveExpiredAt(generateExpiredTime(1));
         user.setDateCreated(new Date());
         user.setDateModified(new Date());
 
@@ -171,59 +173,119 @@ public class UserServiceImpl implements IUserService {
         Optional<User> userOptional = userRepository.findById(userId);
 
         if (userOptional.isEmpty()) {
-            return "Tài khoản không tồn tại!";
+            return "NOT_FOUND";
         }
 
         User user = userOptional.get();
 
         if (user.isActive()) {
-            return "Tài khoản đã được kích hoạt!";
+            return "ALREADY_ACTIVE";
         }
 
         if (!activeCode.equals(user.getCodeActive())) {
-            return "Mã kích hoạt không hợp lệ!";
+            return "INVALID";
         }
 
-        // ✅ Active DB
-        user.setActive(true);
-        userRepository.save(user);
-
-        // ================================
-        // ✅ TẠO USER KEYCLOAK (KHÔNG PASSWORD)
-        // ================================
+        if (user.getCodeActiveExpiredAt() == null
+                || user.getCodeActiveExpiredAt().before(new Date())) {
+            return "EXPIRED"; // 🔥 QUAN TRỌNG
+        }
 
         var token = tokenCacheService.getClientToken();
 
-        var response = identityClient.createNewUser(
-                UserCreationParam.builder()
-                        .username(user.getUsername())
-                        .firstName(user.getFirstName())
-                        .lastName(user.getLastName())
-                        .email(user.getEmail())
-                        .enabled(true)
-                        .emailVerified(true)
-                        .build(), // ❌ KHÔNG credentials
-                "Bearer " + token
-        );
+        try {
+            // ================================
+            // ✅ 1. TẠO USER KEYCLOAK TRƯỚC
+            // ================================
+            var response = identityClient.createNewUser(
+                    UserCreationParam.builder()
+                            .username(user.getUsername())
+                            .firstName(user.getFirstName())
+                            .lastName(user.getLastName())
+                            .email(user.getEmail())
+                            .enabled(true)
+                            .emailVerified(true)
+                            .build(),
+                    "Bearer " + token
+            );
 
-        String keycloakUserId = extractUserId(response);
+            String keycloakUserId = extractUserId(response);
 
-        // ================================
-        // ✅ GỬI EMAIL SET PASSWORD KEYCLOAK
-        // ================================
+            // ================================
+            // ✅ 2. MAPPING ROLE
+            // ================================
+            String clientUUID = clientUuidCacheService
+                    .getAllClientUuid()
+                    .get(clientId);
+            getRoleId("USER");
+            Object role = redisTemplate.opsForHash().get("KEYCLOAK_ROLES", "USER");
 
-        identityClient.executeActionsEmail(
-                "Bearer " + token,
-                keycloakUserId,
-                List.of("UPDATE_PASSWORD")
-        );
+            List<GetRoleIdResponse> roles = new ArrayList<>();
+            GetRoleIdResponse roleParam = new GetRoleIdResponse();
+            roleParam.setId(role.toString());
+            roleParam.setName("USER");
+            roles.add(roleParam);
 
-        // ================================
+            identityClient.mappingRoleToUser(
+                    "Bearer " + token,
+                    keycloakUserId,
+                    clientUUID,
+                    roles
+            );
 
-        user.setUserId(keycloakUserId);
+            // ================================
+            // ✅ 3. GỬI EMAIL
+            // ================================
+            identityClient.executeActionsEmail(
+                    "Bearer " + token,
+                    keycloakUserId,
+                    List.of("UPDATE_PASSWORD")
+            );
+
+            // ================================
+            // ✅ 4. CUỐI CÙNG MỚI ACTIVE DB
+            // ================================
+            user.setActive(true);
+            user.setUserId(keycloakUserId);
+            user.setCodeActive(null);
+            user.setCodeActiveExpiredAt(null);
+            userRepository.save(user);
+
+            return "SUCCESS";
+
+        } catch (Exception e) {
+            log.error("Active user failed: ", e);
+            return "Kích hoạt thất bại do lỗi hệ thống (Keycloak)";
+        }
+    }
+
+    @Override
+    public String resendActiveCode(long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User không tồn tại"));
+
+        if (user.isActive()) {
+            return "Tài khoản đã kích hoạt, không cần gửi lại mã!";
+        }
+
+        String newCode = createActiveCode();
+
+        user.setCodeActive(newCode);
+        user.setCodeActiveExpiredAt(generateExpiredTime(15));
         userRepository.save(user);
 
-        return "Kích hoạt thành công! Vui lòng kiểm tra email để đặt mật khẩu.";
+        // ✅ Gửi lại email qua Kafka
+        MessageResponseUser message = new MessageResponseUser();
+        message.setToUserEmail(user.getEmail());
+        message.setToUserFullName(user.getFirstName() + " " + user.getLastName());
+        message.setToUserId(user.getId());
+        message.setActiveCode(newCode);
+
+        kafkaTemplate.send("send-email-active-response", message);
+
+        log.info("Resend active code cho userId: {}", user.getId());
+
+        return "Đã gửi lại mã kích hoạt!";
     }
 
     private Date formatDateFromStringToDate(String date) {
@@ -277,5 +339,10 @@ public class UserServiceImpl implements IUserService {
         String regex = "^(?=.*[0-9])(?=.*[A-Z])(?=.*[@#$%^&+=!])(?=.{8,}).*";
         Pattern pattern = Pattern.compile(regex);
         return pattern.matcher(password).matches();
+    }
+    private Date generateExpiredTime(int minutes) {
+        return Date.from(
+                Instant.now().plusSeconds(minutes * 60L)
+        );
     }
 }

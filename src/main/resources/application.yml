@@ -3,6 +3,8 @@ server:
 spring:
   application:
     name: user-service
+  thymeleaf:
+    enabled: true
   datasource:
     url: jdbc:mysql://localhost:3306/nihongo?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
     username: root
@@ -19,7 +21,10 @@ spring:
   idp:
     url: http://localhost:8180
     client-id: japanese_app
-    client-secret: pqdSBRdyDoAUTNBmXQcjoQpWhCL4a36R
+    # company
+#    client-secret: pqdSBRdyDoAUTNBmXQcjoQpWhCL4a36R
+    #home
+    client-secret: sawhOBfAfp6pzKVGVxreMvlTcMxFmzXN
     realm: nihongo
 
   security:

@@ -42,21 +42,6 @@ public class AuthController {
         UserDTO userDTO = userService.createUser(user);
         return new ResponseEntity<>(userDTO, HttpStatus.CREATED);
     }
-    @GetMapping("/active")
-    public String activeAccount(
-            @RequestParam long userId,
-            @RequestParam String activeCode,
-            Model model
-    ) {
-        String result = userService.activeUser(userId, activeCode);
 
-        model.addAttribute("message", result);
-
-        if (result.contains("thành công")) {
-            return "active-success"; // templates/active-success.html
-        } else {
-            return "active-failed";  // templates/active-failed.html
-        }
-    }
 
 }

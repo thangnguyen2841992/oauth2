@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Hết hạn</title>
+    <meta charset="UTF-8">
+</head>
+<body>
+
+<h2>Mã kích hoạt đã hết hạn ⏰</h2>
+<p>Vui lòng gửi lại mã kích hoạt mới</p>
+
+<form th:action="@{/resend-active}" method="post">
+    <input type="hidden" name="userId" th:value="${userId}" />
+    <button type="submit">Gửi lại mã</button>
+</form>
+
+</body>
+</html>
