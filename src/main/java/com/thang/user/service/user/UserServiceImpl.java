@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -22,6 +23,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.regex.Pattern;
 
 @Service
 @Slf4j
@@ -33,6 +35,7 @@ public class UserServiceImpl implements IUserService {
     private final RoleCacheService roleCacheService;
     private final RedisTemplate<String, String> redisTemplate;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final PasswordEncoder passwordEncoder;
 
 
     @Value("${spring.idp.client-id}")
@@ -43,7 +46,7 @@ public class UserServiceImpl implements IUserService {
     @NonFinal
     private String clientSecret;
 
-    public UserServiceImpl(IUserRepository userRepository, IdentityClient identityClient, TokenCacheService tokenCacheService, ClientUuidCacheService clientUuidCacheService, RoleCacheService roleCacheService, RedisTemplate<String, String> redisTemplate, KafkaTemplate<String, Object> kafkaTemplate) {
+    public UserServiceImpl(IUserRepository userRepository, IdentityClient identityClient, TokenCacheService tokenCacheService, ClientUuidCacheService clientUuidCacheService, RoleCacheService roleCacheService, RedisTemplate<String, String> redisTemplate, KafkaTemplate<String, Object> kafkaTemplate, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.identityClient = identityClient;
         this.tokenCacheService = tokenCacheService;
@@ -51,6 +54,7 @@ public class UserServiceImpl implements IUserService {
         this.roleCacheService = roleCacheService;
         this.redisTemplate = redisTemplate;
         this.kafkaTemplate = kafkaTemplate;
+        this.passwordEncoder = passwordEncoder;
     }
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
@@ -59,49 +63,42 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     public UserDTO createUser(CreateUserRequest dto) {
-        var token = tokenCacheService.getClientToken();
 
-        log.info("Token info: ", token);
-        var creationResponse = identityClient.createNewUser(UserCreationParam.builder()
-                .username(dto.getUsername())
-                .firstName(dto.getFirstName())
-                .lastName(dto.getLastName())
-                .email(dto.getEmail())
-                .emailVerified(false)
-                .enabled(true)
-                .credentials(List.of(Credentials.builder()
-                        .value(dto.getPassword())
-                        .type("password")
-                        .temporary(false)
-                        .build()))
-                .build(), "Bearer " + token);
-        String userId = extractUserId(creationResponse);
-        String clientUUID = clientUuidCacheService
-                .getAllClientUuid()
-                .get(clientId);
-        getRoleId("USER");
-        Object role = redisTemplate.opsForHash().get("KEYCLOAK_ROLES", "USER");
-        List<GetRoleIdResponse> roles = new  ArrayList<>();
-        GetRoleIdResponse roleParam = new GetRoleIdResponse();
-        roleParam.setId(role.toString());
-        roleParam.setName("USER");
-        roles.add(roleParam);
-        this.identityClient.mappingRoleToUser("Bearer " + token, userId, clientUUID, roles );
-        log.info("User created: ", userId);
+        // 1. Validate password
+        if (!isValidPassword(dto.getPassword())) {
+            throw new RuntimeException("Password không hợp lệ");
+        }
+
+        // 2. Encode password
+        String encodedPassword = passwordEncoder.encode(dto.getPassword());
+
+        // 3. Tạo activation token
+        String activeCode = createActiveCode();
+
+        // 4. Lưu DB (CHƯA ACTIVE)
         User user = new User();
-        user.setUserId(userId);
         user.setUsername(dto.getUsername());
         user.setFirstName(dto.getFirstName());
         user.setLastName(dto.getLastName());
-        user.setPhoneNumber(dto.getPhoneNumber());
-        user.setAddress(dto.getAddress());
         user.setEmail(dto.getEmail());
-        user.setDateOfBirth(formatDateFromStringToDate(dto.getDateOfBirth()));
+        user.setPassword(encodedPassword);
+        user.setActive(false);
+        user.setCodeActive(activeCode);
         user.setDateCreated(new Date());
         user.setDateModified(new Date());
-        user.setRoleName("USER");
-        User newUser = this.userRepository.save(user);
-        return mapperUserToUserDTO(newUser);
+
+        User savedUser = userRepository.save(user);
+
+        // 5. Gửi Kafka email
+        MessageResponseUser message = new MessageResponseUser();
+        message.setToUserEmail(savedUser.getEmail());
+        message.setToUserFullName(savedUser.getFirstName() + " " + savedUser.getLastName());
+        message.setToUserId(savedUser.getId()); // hoặc id DB
+        message.setActiveCode(activeCode);
+
+        kafkaTemplate.send("send-email-active-response", message);
+        log.info("Đã gửi email cho userId: ", savedUser.getUserId());
+        return mapperUserToUserDTO(savedUser);
     }
 
     @Override
@@ -169,27 +166,65 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
-    public String activeUser(String userId, String activeCode) {
-        Optional<User> userOptional = this.userRepository.findByUserId(userId);
-//        if (userOptional.isPresent()) {
-//            User user = userOptional.get();
-//            if (activeCode.equals(user.getCodeActive())) {
-//                if (user.isActive()) {
-//                    return "Tài khoản đã được kích hoạt!";
-//                } else {
-//                    user.setActive(true);
-//                    this.userRepository.save(user);
-                    MessageResponseUser messageResponseUser = new MessageResponseUser();
-                    messageResponseUser.setToUserEmail("nguyenthang28419902@gmail.com");
-                    messageResponseUser.setToUserName("thang2842");
-                    messageResponseUser.setToUserFullName("Nguyễn Thắng");
-                    messageResponseUser.setToUserId("test");
-                    kafkaTemplate.send("send-email-active-response", messageResponseUser);
-                    return "Kích hoạt tài khoản thành công!";
-//        }
-//        return "Tài khoản không tồn tại!";
-    }
+    public String activeUser(long userId, String activeCode) {
 
+        Optional<User> userOptional = userRepository.findById(userId);
+
+        if (userOptional.isEmpty()) {
+            return "Tài khoản không tồn tại!";
+        }
+
+        User user = userOptional.get();
+
+        if (user.isActive()) {
+            return "Tài khoản đã được kích hoạt!";
+        }
+
+        if (!activeCode.equals(user.getCodeActive())) {
+            return "Mã kích hoạt không hợp lệ!";
+        }
+
+        // ✅ Active DB
+        user.setActive(true);
+        userRepository.save(user);
+
+        // ================================
+        // ✅ TẠO USER KEYCLOAK (KHÔNG PASSWORD)
+        // ================================
+
+        var token = tokenCacheService.getClientToken();
+
+        var response = identityClient.createNewUser(
+                UserCreationParam.builder()
+                        .username(user.getUsername())
+                        .firstName(user.getFirstName())
+                        .lastName(user.getLastName())
+                        .email(user.getEmail())
+                        .enabled(true)
+                        .emailVerified(true)
+                        .build(), // ❌ KHÔNG credentials
+                "Bearer " + token
+        );
+
+        String keycloakUserId = extractUserId(response);
+
+        // ================================
+        // ✅ GỬI EMAIL SET PASSWORD KEYCLOAK
+        // ================================
+
+        identityClient.executeActionsEmail(
+                "Bearer " + token,
+                keycloakUserId,
+                List.of("UPDATE_PASSWORD")
+        );
+
+        // ================================
+
+        user.setUserId(keycloakUserId);
+        userRepository.save(user);
+
+        return "Kích hoạt thành công! Vui lòng kiểm tra email để đặt mật khẩu.";
+    }
 
     private Date formatDateFromStringToDate(String date) {
         LocalDate localDate = LocalDate.parse(date);
@@ -231,5 +266,16 @@ public class UserServiceImpl implements IUserService {
         dto.setDateOfBirth(toIsoDateStringVn(user.getDateOfBirth()));
         dto.setRoleName(user.getRoleName());
         return dto;
+    }
+
+    private String createActiveCode() {
+        return UUID.randomUUID().toString();
+    }
+
+    public static boolean isValidPassword(String password) {
+        // Regex pattern
+        String regex = "^(?=.*[0-9])(?=.*[A-Z])(?=.*[@#$%^&+=!])(?=.{8,}).*";
+        Pattern pattern = Pattern.compile(regex);
+        return pattern.matcher(password).matches();
     }
 }

@@ -46,4 +46,10 @@ public interface IdentityClient {
     @PostMapping(value = "/admin/realms/${spring.idp.realm}/users/{userId}/role-mappings/clients/{clientUUID}")
     GetRoleIdResponse mappingRoleToUser(@RequestHeader("authorization") String token, @PathVariable String userId, @PathVariable String clientUUID, @RequestBody List<GetRoleIdResponse> roles);
 
+    @PostMapping("/admin/realms/${spring.idp.realm}/users/{userId}/execute-actions-email")
+    void executeActionsEmail(
+            @RequestHeader("Authorization") String token,
+            @PathVariable String userId,
+            @RequestBody List<String> actions
+    );
 }

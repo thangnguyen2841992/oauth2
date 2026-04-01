@@ -10,13 +10,13 @@ import lombok.Setter;
 @Getter
 @Setter
 public class MessageResponseUser {
-    private String toUserId;
-
     private String toUserEmail;
 
     private String toUserName;
-
     private String toUserFullName;
+
+    private long toUserId;
+    private String activeCode;
 
 
 }

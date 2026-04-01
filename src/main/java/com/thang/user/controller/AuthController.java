@@ -8,6 +8,7 @@ import com.thang.user.service.user.IUserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -41,9 +42,21 @@ public class AuthController {
         UserDTO userDTO = userService.createUser(user);
         return new ResponseEntity<>(userDTO, HttpStatus.CREATED);
     }
-    @PostMapping("/testSendEmail")
-    public ResponseEntity<?> testSendEmail() {
-        return new ResponseEntity<>(this.userService.activeUser("test", "test"), HttpStatus.OK);
+    @GetMapping("/active")
+    public String activeAccount(
+            @RequestParam long userId,
+            @RequestParam String activeCode,
+            Model model
+    ) {
+        String result = userService.activeUser(userId, activeCode);
+
+        model.addAttribute("message", result);
+
+        if (result.contains("thành công")) {
+            return "active-success"; // templates/active-success.html
+        } else {
+            return "active-failed";  // templates/active-failed.html
+        }
     }
 
 }

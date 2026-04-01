@@ -21,6 +21,7 @@ public class User {
     private String userId;
     private String username;
     private String firstName;
+    private String password;
     private String lastName;
     private Date dateOfBirth;
     private String email;
@@ -31,4 +32,6 @@ public class User {
     private Date dateCreated;
     private Date dateModified;
     private String roleName;
+    private boolean isActive;
+    private String codeActive;
 }
