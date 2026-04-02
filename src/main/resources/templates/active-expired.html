@@ -9,7 +9,7 @@
 <h2>Mã kích hoạt đã hết hạn ⏰</h2>
 <p>Vui lòng gửi lại mã kích hoạt mới</p>
 
-<form th:action="@{/resend-active}" method="post">
+<form th:action="@{http://localhost:8082/api/active-user/resend-active}" method="post">
     <input type="hidden" name="userId" th:value="${userId}" />
     <button type="submit">Gửi lại mã</button>
 </form>

@@ -340,9 +340,11 @@ public class UserServiceImpl implements IUserService {
         Pattern pattern = Pattern.compile(regex);
         return pattern.matcher(password).matches();
     }
+
     private Date generateExpiredTime(int minutes) {
         return Date.from(
                 Instant.now().plusSeconds(minutes * 60L)
         );
     }
 }
+
