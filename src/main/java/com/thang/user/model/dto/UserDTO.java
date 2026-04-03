@@ -13,7 +13,6 @@ public class UserDTO {
     private long id;
     private String userId;
     private String username;
-    private String password;
     private String firstName;
     private String lastName;
     private String dateOfBirth;
@@ -21,9 +20,6 @@ public class UserDTO {
     private String phoneNumber;
     private String address;
     private String roleName;
-
-    //    @Column(unique = true, nullable = false)
-//    private String plainTextDEK;
     private String dateCreated;
     private String dateModified;
 }

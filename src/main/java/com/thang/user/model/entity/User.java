@@ -21,14 +21,11 @@ public class User {
     private String userId;
     private String username;
     private String firstName;
-    private String password;
     private String lastName;
     private Date dateOfBirth;
     private String email;
     private String phoneNumber;
     private String address;
-//    @Column(unique = true, nullable = false)
-//    private String plainTextDEK;
     private Date dateCreated;
     private Date dateModified;
     private String roleName;

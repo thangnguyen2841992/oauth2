@@ -11,10 +11,8 @@ import lombok.Setter;
 @Setter
 public class MessageResponseUser {
     private String toUserEmail;
-
     private String toUserName;
     private String toUserFullName;
-
     private long toUserId;
     private String activeCode;
 

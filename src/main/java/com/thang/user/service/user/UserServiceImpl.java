@@ -1,5 +1,6 @@
 package com.thang.user.service.user;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.thang.user.model.dto.CreateUserRequest;
 import com.thang.user.model.dto.LoginRequest;
 import com.thang.user.model.dto.MessageResponseUser;
@@ -10,12 +11,10 @@ import com.thang.user.repository.IUserRepository;
 import com.thang.user.repository.IdentityClient;
 import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -23,7 +22,6 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.regex.Pattern;
 
 @Service
 @Slf4j
@@ -35,7 +33,6 @@ public class UserServiceImpl implements IUserService {
     private final RoleCacheService roleCacheService;
     private final RedisTemplate<String, String> redisTemplate;
     private final KafkaTemplate<String, Object> kafkaTemplate;
-    private final PasswordEncoder passwordEncoder;
 
 
     @Value("${spring.idp.client-id}")
@@ -46,7 +43,7 @@ public class UserServiceImpl implements IUserService {
     @NonFinal
     private String clientSecret;
 
-    public UserServiceImpl(IUserRepository userRepository, IdentityClient identityClient, TokenCacheService tokenCacheService, ClientUuidCacheService clientUuidCacheService, RoleCacheService roleCacheService, RedisTemplate<String, String> redisTemplate, KafkaTemplate<String, Object> kafkaTemplate, PasswordEncoder passwordEncoder) {
+    public UserServiceImpl(IUserRepository userRepository, IdentityClient identityClient, TokenCacheService tokenCacheService, ClientUuidCacheService clientUuidCacheService, RoleCacheService roleCacheService, RedisTemplate<String, String> redisTemplate, KafkaTemplate<String, Object> kafkaTemplate) {
         this.userRepository = userRepository;
         this.identityClient = identityClient;
         this.tokenCacheService = tokenCacheService;
@@ -54,7 +51,6 @@ public class UserServiceImpl implements IUserService {
         this.roleCacheService = roleCacheService;
         this.redisTemplate = redisTemplate;
         this.kafkaTemplate = kafkaTemplate;
-        this.passwordEncoder = passwordEncoder;
     }
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
@@ -62,36 +58,21 @@ public class UserServiceImpl implements IUserService {
 
 
     @Override
-    public UserDTO createUser(CreateUserRequest dto) {
-
-        // 1. Validate password
-        if (!isValidPassword(dto.getPassword())) {
-            throw new RuntimeException("Password không hợp lệ");
-        }
-
-        // 2. Encode password
-        String encodedPassword = passwordEncoder.encode(dto.getPassword());
-
-        // 3. Tạo activation token
+    public void createUser(CreateUserRequest dto) {
         String activeCode = createActiveCode();
-
-
-        // 4. Lưu DB (CHƯA ACTIVE)
         User user = new User();
         user.setUsername(dto.getUsername());
         user.setFirstName(dto.getFirstName());
         user.setLastName(dto.getLastName());
+        user.setDateOfBirth(formatDateFromStringToDate(dto.getDateOfBirth()));
         user.setEmail(dto.getEmail());
-        user.setPassword(encodedPassword);
+        user.setAddress(dto.getAddress());
         user.setActive(false);
         user.setCodeActive(activeCode);
         user.setCodeActiveExpiredAt(generateExpiredTime(1));
         user.setDateCreated(new Date());
         user.setDateModified(new Date());
-
         User savedUser = userRepository.save(user);
-
-        // 5. Gửi Kafka email
         MessageResponseUser message = new MessageResponseUser();
         message.setToUserEmail(savedUser.getEmail());
         message.setToUserFullName(savedUser.getFirstName() + " " + savedUser.getLastName());
@@ -100,7 +81,7 @@ public class UserServiceImpl implements IUserService {
 
         kafkaTemplate.send("send-email-active-response", message);
         log.info("Đã gửi email cho userId: ", savedUser.getUserId());
-        return mapperUserToUserDTO(savedUser);
+        mapperUserToUserDTO(savedUser);
     }
 
     @Override
@@ -163,8 +144,8 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
-    public String getRoleId(String roleName) {
-        return this.roleCacheService.getRoleId(roleName);
+    public void getRoleId(String roleName) {
+        this.roleCacheService.getRoleId(roleName);
     }
 
     @Override
@@ -175,28 +156,20 @@ public class UserServiceImpl implements IUserService {
         if (userOptional.isEmpty()) {
             return "NOT_FOUND";
         }
-
         User user = userOptional.get();
-
         if (user.isActive()) {
             return "ALREADY_ACTIVE";
         }
-
         if (!activeCode.equals(user.getCodeActive())) {
             return "INVALID";
         }
-
         if (user.getCodeActiveExpiredAt() == null
                 || user.getCodeActiveExpiredAt().before(new Date())) {
-            return "EXPIRED"; // 🔥 QUAN TRỌNG
+            return "EXPIRED";
         }
-
         var token = tokenCacheService.getClientToken();
 
         try {
-            // ================================
-            // ✅ 1. TẠO USER KEYCLOAK TRƯỚC
-            // ================================
             var response = identityClient.createNewUser(
                     UserCreationParam.builder()
                             .username(user.getUsername())
@@ -211,9 +184,6 @@ public class UserServiceImpl implements IUserService {
 
             String keycloakUserId = extractUserId(response);
 
-            // ================================
-            // ✅ 2. MAPPING ROLE
-            // ================================
             String clientUUID = clientUuidCacheService
                     .getAllClientUuid()
                     .get(clientId);
@@ -233,18 +203,13 @@ public class UserServiceImpl implements IUserService {
                     roles
             );
 
-            // ================================
-            // ✅ 3. GỬI EMAIL
-            // ================================
+
             identityClient.executeActionsEmail(
                     "Bearer " + token,
                     keycloakUserId,
                     List.of("UPDATE_PASSWORD")
             );
 
-            // ================================
-            // ✅ 4. CUỐI CÙNG MỚI ACTIVE DB
-            // ================================
             user.setActive(true);
             user.setUserId(keycloakUserId);
             user.setCodeActive(null);
@@ -274,7 +239,6 @@ public class UserServiceImpl implements IUserService {
         user.setCodeActiveExpiredAt(generateExpiredTime(15));
         userRepository.save(user);
 
-        // ✅ Gửi lại email qua Kafka
         MessageResponseUser message = new MessageResponseUser();
         message.setToUserEmail(user.getEmail());
         message.setToUserFullName(user.getFirstName() + " " + user.getLastName());
@@ -286,6 +250,22 @@ public class UserServiceImpl implements IUserService {
         log.info("Resend active code cho userId: {}", user.getId());
 
         return "Đã gửi lại mã kích hoạt!";
+    }
+
+    @Override
+    public String extractUsername(String token) {
+        try {
+            String[] parts = token.split("\\.");
+
+            String payload = new String(Base64.getDecoder().decode(parts[1]));
+
+            ObjectMapper mapper = new ObjectMapper();
+            Map map = mapper.readValue(payload, Map.class);
+
+            return  (String) map.get("preferred_username");
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private Date formatDateFromStringToDate(String date) {
@@ -332,13 +312,6 @@ public class UserServiceImpl implements IUserService {
 
     private String createActiveCode() {
         return UUID.randomUUID().toString();
-    }
-
-    public static boolean isValidPassword(String password) {
-        // Regex pattern
-        String regex = "^(?=.*[0-9])(?=.*[A-Z])(?=.*[@#$%^&+=!])(?=.{8,}).*";
-        Pattern pattern = Pattern.compile(regex);
-        return pattern.matcher(password).matches();
     }
 
     private Date generateExpiredTime(int minutes) {

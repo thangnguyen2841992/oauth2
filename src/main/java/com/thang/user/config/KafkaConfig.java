@@ -10,8 +10,5 @@ public class KafkaConfig {
     NewTopic checkSendActiveEmailTopic() {
         return new NewTopic("send-email-active-response",2,(short) 1);
     }
-//    NewTopic checkSendBirthDayTopic() {
-//        return new NewTopic("send-email-birthday-response",2,(short) 1);
-//    }
 
 }

@@ -18,15 +18,11 @@ public class ClientUuidCacheService {
     private final IdentityClient identityClient;
     private final TokenCacheService tokenCacheService;
 
-    @Value("${spring.idp.client-id}")
-    private String clientId;
-
     private static final String ALL_CLIENTS_KEY = "KEYCLOAK_ALL_CLIENTS";
 
     public Map<String, String> getAllClientUuid() {
 
         Map<Object, Object> cache = redisTemplate.opsForHash().entries(ALL_CLIENTS_KEY);
-
         if (!cache.isEmpty()) {
             return cache.entrySet().stream()
                     .collect(Collectors.toMap(
@@ -36,34 +32,23 @@ public class ClientUuidCacheService {
         }
 
         String token = tokenCacheService.getClientToken();
-
         try {
             return fetchAndCache(token);
         } catch (feign.FeignException.Forbidden e) {
-
-            // 🔥 1. Token có vấn đề → clear cache
             tokenCacheService.evictToken();
-
-            // 🔥 2. Lấy token mới
             String newToken = tokenCacheService.getClientToken();
-
-            // 🔥 3. Retry
             return fetchAndCache(newToken);
         }
     }
     private Map<String, String> fetchAndCache(String token) {
-
         var response = identityClient.getUuidClient("Bearer " + token);
-
         Map<String, String> map = response.stream()
                 .collect(Collectors.toMap(
                         GetUuidClientResponse::getClientId,
                         GetUuidClientResponse::getId
                 ));
-
         redisTemplate.opsForHash().putAll(ALL_CLIENTS_KEY, map);
         redisTemplate.expire(ALL_CLIENTS_KEY, Duration.ofHours(24));
-
         return map;
     }
 }
