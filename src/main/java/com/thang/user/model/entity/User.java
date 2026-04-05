@@ -32,4 +32,5 @@ public class User {
     private boolean isActive;
     private String codeActive;
     private Date codeActiveExpiredAt;
+    private String provider; // LOCAL, GOOGLE
 }

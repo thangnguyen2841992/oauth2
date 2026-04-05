@@ -9,14 +9,19 @@ import com.thang.user.model.dto.identity.*;
 import com.thang.user.model.entity.User;
 import com.thang.user.repository.IUserRepository;
 import com.thang.user.repository.IdentityClient;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -266,6 +271,69 @@ public class UserServiceImpl implements IUserService {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    @Override
+    public void createUserFromGoogle(String email,
+                                     String firstName,
+                                     String lastName,
+                                     String keycloakUserId) {
+
+        Optional<User> userOpt = userRepository.findByEmail(email);
+
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+
+            // 🔥 update nếu chưa có userId
+            if (user.getUserId() == null) {
+                user.setUserId(keycloakUserId);
+            }
+
+            user.setActive(true);
+            user.setProvider("GOOGLE");
+
+            userRepository.save(user);
+            return;
+        }
+
+        User user = new User();
+        user.setEmail(email);
+        user.setFirstName(firstName);
+        user.setLastName(lastName);
+
+        user.setUserId(keycloakUserId); // 🔥 QUAN TRỌNG
+
+        user.setActive(true);
+        user.setProvider("GOOGLE");
+
+        user.setDateCreated(new Date());
+        user.setDateModified(new Date());
+
+        // 👉 default role
+        user.setRoleName("USER");
+
+        userRepository.save(user);
+    }
+
+    @Override
+    public void onAuthenticationSuccess(HttpServletRequest request,
+                                        HttpServletResponse response,
+                                        Authentication authentication) throws IOException {
+
+        OAuth2User user = (OAuth2User) authentication.getPrincipal();
+
+        assert user != null;
+        String email = user.getAttribute("email");
+        String name = user.getAttribute("name");
+
+        // 🔥 LẤY KEYCLOAK USER ID
+        String keycloakUserId = user.getAttribute("sub");
+
+        String lastName = "";
+
+       createUserFromGoogle(email, name, lastName, keycloakUserId);
+
+        response.sendRedirect("http://localhost:8082/api/auth/home");
     }
 
     private Date formatDateFromStringToDate(String date) {

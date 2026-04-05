@@ -20,14 +20,15 @@ public class RoleCacheService {
 
     private static final String ROLE_HASH_KEY = "KEYCLOAK_ROLES";
 
-    public String getRoleId(String roleName) {
+    public void getRoleId(String roleName) {
 
         // 🔥 1. Check Redis (HASH)
         Object roleId = redisTemplate.opsForHash().get(ROLE_HASH_KEY, roleName);
 
         if (roleId != null) {
             System.out.println("🔥 ROLE from Redis: " + roleName);
-            return roleId.toString();
+            roleId.toString();
+            return;
         }
 
         // 🔥 2. Call API
@@ -55,6 +56,5 @@ public class RoleCacheService {
         redisTemplate.opsForHash().put(ROLE_HASH_KEY, roleName, id);
         redisTemplate.expire(ROLE_HASH_KEY, Duration.ofHours(24));
 
-        return id;
     }
 }

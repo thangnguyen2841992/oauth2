@@ -68,6 +68,8 @@ public class AuthController {
     @PostMapping("/register")
     public String register(@RequestParam String username,
                            @RequestParam String email,
+                           @RequestParam String firstName,
+                           @RequestParam String lastName,
                            @RequestParam(required = false) String birthday,
                            @RequestParam(required = false) String address,
                            Model model) {
@@ -78,6 +80,8 @@ public class AuthController {
             request.setEmail(email);
             request.setDateOfBirth(birthday);
             request.setAddress(address);
+            request.setFirstName(firstName);
+            request.setLastName(lastName);
 
             userService.createUser(request);
 
