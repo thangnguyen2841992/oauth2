@@ -52,4 +52,15 @@ public interface IdentityClient {
             @PathVariable String userId,
             @RequestBody List<String> actions
     );
+    @GetMapping("/admin/realms/${spring.idp.realm}/roles/{roleName}")
+    GetRoleIdResponse getRealmRole(
+            @RequestHeader("authorization") String token,
+            @PathVariable String roleName
+    );
+    @PostMapping("/admin/realms/${spring.idp.realm}/users/{userId}/role-mappings/realm")
+    void mappingRealmRoleToUser(
+            @RequestHeader("authorization") String token,
+            @PathVariable String userId,
+            @RequestBody List<GetRoleIdResponse> roles
+    );
 }

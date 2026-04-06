@@ -165,6 +165,7 @@ public class UserServiceImpl implements IUserService {
 
         return token;
     }
+
     public String extractClaim(String token, String claim) {
         try {
             String[] parts = token.split("\\.");
@@ -227,24 +228,8 @@ public class UserServiceImpl implements IUserService {
 
             String keycloakUserId = extractUserId(response);
 
-            String clientUUID = clientUuidCacheService
-                    .getAllClientUuid()
-                    .get(clientId);
-            this.roleCacheService.getRoleId("USER");
-            Object role = redisTemplate.opsForHash().get("KEYCLOAK_ROLES", "USER");
+            assignDefaultRole(keycloakUserId, "USER");
 
-            List<GetRoleIdResponse> roles = new ArrayList<>();
-            GetRoleIdResponse roleParam = new GetRoleIdResponse();
-            roleParam.setId(role.toString());
-            roleParam.setName("USER");
-            roles.add(roleParam);
-
-            identityClient.mappingRoleToUser(
-                    "Bearer " + token,
-                    keycloakUserId,
-                    clientUUID,
-                    roles
-            );
 
 
             identityClient.executeActionsEmail(
@@ -305,7 +290,7 @@ public class UserServiceImpl implements IUserService {
             ObjectMapper mapper = new ObjectMapper();
             Map map = mapper.readValue(payload, Map.class);
 
-            return  (String) map.get("preferred_username");
+            return (String) map.get("preferred_username");
         } catch (Exception e) {
             return null;
         }
@@ -349,32 +334,21 @@ public class UserServiceImpl implements IUserService {
 
         // 👉 default role
         user.setRoleName("USER");
-        String token = tokenCacheService.getClientToken();
-
-        String clientUUID = clientUuidCacheService
-                .getAllClientUuid()
-                .get(clientId);
-
-        this.roleCacheService.getRoleId("USER");
-
-        Object role = redisTemplate.opsForHash()
-                .get("KEYCLOAK_ROLES", "USER");
-
-        List<GetRoleIdResponse> roles = new ArrayList<>();
-        GetRoleIdResponse roleParam = new GetRoleIdResponse();
-        roleParam.setId(role.toString());
-        roleParam.setName("USER");
-        roles.add(roleParam);
-
-        identityClient.mappingRoleToUser(
-                "Bearer " + token,
-                keycloakUserId,
-                clientUUID,
-                roles
-        );
+        assignDefaultRole(keycloakUserId, "USER");
         userRepository.save(user);
     }
 
+    private void assignDefaultRole(String userId, String roleName) {
+        String token = tokenCacheService.getClientToken();
+
+        GetRoleIdResponse role = roleCacheService.getRole("USER");
+
+        identityClient.mappingRealmRoleToUser(
+                "Bearer " + token,
+                userId,
+                List.of(role)
+        );
+    }
 
 
     private Date formatDateFromStringToDate(String date) {
@@ -404,7 +378,7 @@ public class UserServiceImpl implements IUserService {
         body.add("client_id", "japanese_app");
         body.add("client_secret", clientSecret);
         body.add("code", code);
-        body.add("redirect_uri", "http://localhost:8082/api/auth/login/oauth2/code/keycloak");
+        body.add("redirect_uri", "http://localhost:8082/api/auth/callbackGoogle");
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);

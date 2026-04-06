@@ -10,6 +10,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.List;
 
 @Component
 public class JwtCookieFilter extends OncePerRequestFilter {
@@ -26,19 +29,39 @@ public class JwtCookieFilter extends OncePerRequestFilter {
             for (Cookie cookie : request.getCookies()) {
                 if ("accessToken".equals(cookie.getName())) {
                     token = cookie.getValue();
+                    break;
                 }
             }
         }
 
-        if (token != null) {
+        if (token != null && request.getHeader("Authorization") == null) {
             String finalToken = token;
+
             request = new HttpServletRequestWrapper(request) {
+
                 @Override
                 public String getHeader(String name) {
                     if ("Authorization".equalsIgnoreCase(name)) {
                         return "Bearer " + finalToken;
                     }
                     return super.getHeader(name);
+                }
+
+                @Override
+                public Enumeration<String> getHeaders(String name) {
+                    if ("Authorization".equalsIgnoreCase(name)) {
+                        return Collections.enumeration(List.of("Bearer " + finalToken));
+                    }
+                    return super.getHeaders(name);
+                }
+
+                @Override
+                public Enumeration<String> getHeaderNames() {
+                    List<String> names = Collections.list(super.getHeaderNames());
+                    if (!names.contains("Authorization")) {
+                        names.add("Authorization");
+                    }
+                    return Collections.enumeration(names);
                 }
             };
         }
