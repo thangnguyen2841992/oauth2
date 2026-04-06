@@ -24,7 +24,7 @@
             padding: 40px;
             border-radius: 16px;
             width: 350px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
             text-align: center;
         }
 
@@ -118,7 +118,7 @@
 
         .google-btn:hover {
             background-color: #f7f8f8;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
         }
 
         .google-btn:active {
@@ -152,18 +152,16 @@
     <div class="divider">
         <span>OR</span>
     </div>
-
-    <!-- Google login -->
-    <a th:href="@{http://localhost:8180/realms/nihongo/protocol/openid-connect/auth(
-        client_id='japanese_app',
-        redirect_uri='http://localhost:8082/login/oauth2/code/keycloak',
-        response_type='code',
-        scope='openid'
-    )}" class="google-btn">
+    <a href="http://localhost:8180/realms/nihongo/protocol/openid-connect/auth
+?client_id=japanese_app
+&response_type=code
+&scope=openid%20email%20profile
+&redirect_uri=http://localhost:8082/api/auth/callbackGoogle
+&kc_idp_hint=google"
+       class="google-btn">
 
         <img src="https://developers.google.com/identity/images/g-logo.png">
         <span>Đăng nhập với Google</span>
-
     </a>
 </div>
 

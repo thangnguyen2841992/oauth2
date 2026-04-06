@@ -15,6 +15,8 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
+
 @Controller
 @RequestMapping("/api/auth")
 public class AuthController {
@@ -128,6 +130,24 @@ public class AuthController {
         response.addCookie(cookie);
 
         return "redirect:http://localhost:8082/api/auth/login";
+    }
+
+    @GetMapping("/callbackGoogle")
+    public void callback(@RequestParam String code,
+                         HttpServletResponse response) throws IOException {
+
+        TokenUserResponse token = userService.handleOAuth2Login(code);
+
+        String accessToken = token.getAccess_token();
+
+        Cookie cookie = new Cookie("accessToken", accessToken);
+        cookie.setHttpOnly(true);
+        cookie.setPath("/");
+        cookie.setMaxAge(3600);
+
+        response.addCookie(cookie);
+
+        response.sendRedirect("http://localhost:8082/api/auth/home");
     }
 
 }

@@ -15,11 +15,18 @@ import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestTemplate;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -138,6 +145,41 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
+    public TokenUserResponse handleOAuth2Login(String code) {
+
+        // 1. exchange code -> token
+        TokenUserResponse token = this.exchangeCodeToToken(code);
+
+        String accessToken = token.getAccess_token();
+
+        // 2. decode JWT
+        String email = extractClaim(accessToken, "email");
+        String name = extractClaim(accessToken, "name");
+        String sub = extractClaim(accessToken, "sub");
+
+        // split name nếu cần
+        String lastName = "";
+
+        // 3. create/update user DB
+        createUserFromGoogle(email, name, lastName, sub);
+
+        return token;
+    }
+    public String extractClaim(String token, String claim) {
+        try {
+            String[] parts = token.split("\\.");
+            String payload = new String(Base64.getDecoder().decode(parts[1]));
+
+            ObjectMapper mapper = new ObjectMapper();
+            Map map = mapper.readValue(payload, Map.class);
+
+            return (String) map.get(claim);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    @Override
     public List<UserKeyCloakResponse> getAllUsersKeyCloak() {
         var token = tokenCacheService.getClientToken();
         return this.identityClient.getAllUsersKeyCloak("Bearer " + token);
@@ -148,10 +190,6 @@ public class UserServiceImpl implements IUserService {
         return this.clientUuidCacheService.getAllClientUuid();
     }
 
-    @Override
-    public void getRoleId(String roleName) {
-        this.roleCacheService.getRoleId(roleName);
-    }
 
     @Override
     public String activeUser(long userId, String activeCode) {
@@ -192,7 +230,7 @@ public class UserServiceImpl implements IUserService {
             String clientUUID = clientUuidCacheService
                     .getAllClientUuid()
                     .get(clientId);
-            getRoleId("USER");
+            this.roleCacheService.getRoleId("USER");
             Object role = redisTemplate.opsForHash().get("KEYCLOAK_ROLES", "USER");
 
             List<GetRoleIdResponse> roles = new ArrayList<>();
@@ -280,7 +318,7 @@ public class UserServiceImpl implements IUserService {
                                      String keycloakUserId) {
 
         Optional<User> userOpt = userRepository.findByEmail(email);
-
+        String username = email.split("@")[0];
         if (userOpt.isPresent()) {
             User user = userOpt.get();
 
@@ -288,7 +326,6 @@ public class UserServiceImpl implements IUserService {
             if (user.getUserId() == null) {
                 user.setUserId(keycloakUserId);
             }
-
             user.setActive(true);
             user.setProvider("GOOGLE");
 
@@ -298,6 +335,7 @@ public class UserServiceImpl implements IUserService {
 
         User user = new User();
         user.setEmail(email);
+        user.setUsername(username);
         user.setFirstName(firstName);
         user.setLastName(lastName);
 
@@ -311,30 +349,33 @@ public class UserServiceImpl implements IUserService {
 
         // 👉 default role
         user.setRoleName("USER");
+        String token = tokenCacheService.getClientToken();
 
+        String clientUUID = clientUuidCacheService
+                .getAllClientUuid()
+                .get(clientId);
+
+        this.roleCacheService.getRoleId("USER");
+
+        Object role = redisTemplate.opsForHash()
+                .get("KEYCLOAK_ROLES", "USER");
+
+        List<GetRoleIdResponse> roles = new ArrayList<>();
+        GetRoleIdResponse roleParam = new GetRoleIdResponse();
+        roleParam.setId(role.toString());
+        roleParam.setName("USER");
+        roles.add(roleParam);
+
+        identityClient.mappingRoleToUser(
+                "Bearer " + token,
+                keycloakUserId,
+                clientUUID,
+                roles
+        );
         userRepository.save(user);
     }
 
-    @Override
-    public void onAuthenticationSuccess(HttpServletRequest request,
-                                        HttpServletResponse response,
-                                        Authentication authentication) throws IOException {
 
-        OAuth2User user = (OAuth2User) authentication.getPrincipal();
-
-        assert user != null;
-        String email = user.getAttribute("email");
-        String name = user.getAttribute("name");
-
-        // 🔥 LẤY KEYCLOAK USER ID
-        String keycloakUserId = user.getAttribute("sub");
-
-        String lastName = "";
-
-       createUserFromGoogle(email, name, lastName, keycloakUserId);
-
-        response.sendRedirect("http://localhost:8082/api/auth/home");
-    }
 
     private Date formatDateFromStringToDate(String date) {
         LocalDate localDate = LocalDate.parse(date);
@@ -349,6 +390,28 @@ public class UserServiceImpl implements IUserService {
         Instant instant = date.toInstant();
         LocalDate localDate = instant.atZone(VN_ZONE).toLocalDate();
         return localDate.format(FORMATTER);
+    }
+
+    @Override
+    public TokenUserResponse exchangeCodeToToken(String code) {
+
+        RestTemplate restTemplate = new RestTemplate();
+
+        String url = "http://localhost:8180/realms/nihongo/protocol/openid-connect/token";
+
+        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+        body.add("grant_type", "authorization_code");
+        body.add("client_id", "japanese_app");
+        body.add("client_secret", clientSecret);
+        body.add("code", code);
+        body.add("redirect_uri", "http://localhost:8082/api/auth/login/oauth2/code/keycloak");
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+
+        HttpEntity<?> request = new HttpEntity<>(body, headers);
+
+        return restTemplate.postForObject(url, request, TokenUserResponse.class);
     }
 
     private String extractUserId(ResponseEntity<?> response) {

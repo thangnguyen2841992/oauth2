@@ -30,8 +30,6 @@ public interface IUserService {
 
     Map<String, String> getUuidClient();
 
-    void getRoleId(String roleName);
-
     String activeUser(long userId, String activeCode);
 
     String resendActiveCode(long userId);
@@ -43,7 +41,7 @@ public interface IUserService {
                               String lastName,
                               String keycloakUserId);
 
-    void onAuthenticationSuccess(HttpServletRequest request,
-                                 HttpServletResponse response,
-                                 Authentication authentication) throws IOException;
+
+    TokenUserResponse exchangeCodeToToken(String code);
+    TokenUserResponse handleOAuth2Login(String code);
 }
