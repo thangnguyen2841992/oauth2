@@ -1,15 +1,12 @@
 package com.thang.user.model.dto.identity;
 
 import lombok.*;
-import com.fasterxml.jackson.databind.PropertyNamingStrategies;
-import com.fasterxml.jackson.databind.annotation.JsonNaming;
 
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-//@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public class TokenExchangeResponse {
     String access_token;
     String refresh_token;

@@ -70,7 +70,7 @@ public class UserServiceImpl implements IUserService {
 
 
     @Override
-    public void createUser(CreateUserRequest dto) {
+    public User createUser(CreateUserRequest dto) {
         String activeCode = createActiveCode();
         User user = new User();
         user.setUsername(dto.getUsername());
@@ -94,6 +94,7 @@ public class UserServiceImpl implements IUserService {
         kafkaTemplate.send("send-email-active-response", message);
         log.info("Đã gửi email cho userId: ", savedUser.getUserId());
         mapperUserToUserDTO(savedUser);
+        return savedUser;
     }
 
     @Override
@@ -335,13 +336,18 @@ public class UserServiceImpl implements IUserService {
         // 👉 default role
         user.setRoleName("USER");
         assignDefaultRole(keycloakUserId, "USER");
+//        identityClient.executeActionsEmail(
+//                "Bearer " + token,
+//                keycloakUserId,
+//                List.of("UPDATE_PASSWORD")
+//        );
         userRepository.save(user);
     }
 
     private void assignDefaultRole(String userId, String roleName) {
         String token = tokenCacheService.getClientToken();
 
-        GetRoleIdResponse role = roleCacheService.getRole("USER");
+        GetRoleIdResponse role = roleCacheService.getRole(roleName);
 
         identityClient.mappingRealmRoleToUser(
                 "Bearer " + token,

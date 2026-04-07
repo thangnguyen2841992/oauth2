@@ -5,6 +5,7 @@ import com.thang.user.model.dto.LoginRequest;
 import com.thang.user.model.dto.UserDTO;
 import com.thang.user.model.dto.identity.TokenUserResponse;
 import com.thang.user.model.dto.identity.UserKeyCloakResponse;
+import com.thang.user.model.entity.User;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.core.Authentication;
@@ -14,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 public interface IUserService {
-    void createUser(CreateUserRequest dto);
+    User createUser(CreateUserRequest dto);
 
     List<UserDTO> getAllUsers();
 

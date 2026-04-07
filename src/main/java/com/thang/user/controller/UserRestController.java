@@ -1,12 +1,9 @@
 package com.thang.user.controller;
 
-import com.thang.user.model.dto.CreateUserRequest;
-import com.thang.user.model.dto.UserDTO;
 import com.thang.user.service.user.IUserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
 @RestController

@@ -2,18 +2,18 @@ package com.thang.user.controller;
 
 import com.thang.user.model.dto.CreateUserRequest;
 import com.thang.user.model.dto.LoginRequest;
-import com.thang.user.model.dto.UserDTO;
 import com.thang.user.model.dto.identity.TokenUserResponse;
+import com.thang.user.model.entity.User;
 import com.thang.user.service.user.IUserService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import java.io.IOException;
 
@@ -85,9 +85,9 @@ public class AuthController {
             request.setFirstName(firstName);
             request.setLastName(lastName);
 
-            userService.createUser(request);
-
-            return "redirect:http://localhost:8082/api/auth/login";
+            User saveUser = userService.createUser(request);
+            return "redirect:http://localhost:80/notification-success?userId="
+                    + saveUser.getId() + "&email=" + saveUser.getEmail();
 
         } catch (Exception e) {
             model.addAttribute("error", "Đăng ký thất bại!");
@@ -109,7 +109,7 @@ public class AuthController {
         }
 
         if (token != null) {
-            String username  = this.userService.extractUsername(token);
+            String username = this.userService.extractUsername(token);
             model.addAttribute("username", username);
             model.addAttribute("isLoggedIn", true);
         } else {
@@ -148,6 +148,15 @@ public class AuthController {
         response.addCookie(cookie);
 
         response.sendRedirect("http://localhost:8082/api/auth/home");
+    }
+
+    @GetMapping("/notification-success")
+    public String view(@RequestParam Long userId,
+                       @RequestParam String email,
+                       Model model) {
+        model.addAttribute("userId", userId);
+        model.addAttribute("email", email);
+        return "notification-success";
     }
 
 }

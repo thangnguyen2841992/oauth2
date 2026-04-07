@@ -1,13 +1,10 @@
 package com.thang.user.controller;
 
 import com.thang.user.service.user.IUserService;
-import org.springframework.stereotype.Component;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.*;
 
 @RequestMapping("/api/active-user")
 @Controller
@@ -37,14 +34,16 @@ public class AuthViewController {
     }
 
     @PostMapping("/resend-active")
-    public String resendActive(@RequestParam long userId, Model model) {
+    @ResponseBody
+    public ResponseEntity<String> resendActive(@RequestParam(required = false) Long userId) {
 
-        String message = userService.resendActiveCode(userId);
+        if (userId == null) {
+            return ResponseEntity.badRequest().body("Missing userId");
+        }
 
-        model.addAttribute("message", message);
-
-        return "resend-success";
+        return ResponseEntity.ok(userService.resendActiveCode(userId));
     }
+
 
 
 }

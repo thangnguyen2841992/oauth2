@@ -21,9 +21,9 @@ spring:
     url: http://localhost:8180
     client-id: japanese_app
     # company
-#    client-secret: pqdSBRdyDoAUTNBmXQcjoQpWhCL4a36R
+    client-secret: pqdSBRdyDoAUTNBmXQcjoQpWhCL4a36R
     #home
-    client-secret: sawhOBfAfp6pzKVGVxreMvlTcMxFmzXN
+#    client-secret: sawhOBfAfp6pzKVGVxreMvlTcMxFmzXN
     realm: nihongo
 
   security:
