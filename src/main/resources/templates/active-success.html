@@ -1,8 +1,208 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
+<html lang="vi" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Kích hoạt thành công</title>
+
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #eef2ff, #ecfdf5);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .card {
+            width: 420px;
+            background: #fff;
+            border-radius: 18px;
+            padding: 35px 30px;
+            text-align: center;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.1);
+            animation: fadeIn 0.5s ease;
+        }
+
+        .icon {
+            font-size: 60px;
+        }
+
+        h2 {
+            margin: 15px 0 10px;
+            color: #16a34a;
+        }
+
+        p {
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        .email {
+            color: #4f46e5;
+            font-weight: 600;
+            margin: 8px 0;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 10px 18px;
+            border-radius: 8px;
+            text-decoration: none;
+            margin: 5px;
+            font-size: 14px;
+            transition: 0.25s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #4f46e5, #6366f1);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 18px rgba(79, 70, 229, 0.3);
+        }
+
+        .btn-outline {
+            border: 1px solid #d1d5db;
+            color: #374151;
+        }
+
+        .btn-outline:hover {
+            background: #f3f4f6;
+        }
+
+        .resend {
+            margin-top: 15px;
+            font-size: 13px;
+        }
+
+        .resend button {
+            padding: 6px 14px;
+            border-radius: 999px;
+            border: none;
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            color: white;
+            cursor: pointer;
+        }
+
+        .resend button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .note {
+            font-size: 12px;
+            color: #9ca3af;
+            margin-top: 10px;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+
 <body>
-<h2 style="color: green;">Kích hoạt thành công 🎉</h2>
-<p th:text="${message}"></p>
-<a href="/api/auth/login">Đăng nhập</a>
+
+<div class="card">
+    <div class="icon">🎉</div>
+
+    <h2>Kích hoạt thành công</h2>
+
+    <p>Tài khoản của bạn đã được kích hoạt.</p>
+
+    <p th:text="${message}"></p>
+
+    <p>
+        Chúng tôi đã gửi email để bạn <b>thiết lập mật khẩu</b>.
+    </p>
+
+    <p class="email" th:text="${email}">example@gmail.com</p>
+
+    <div>
+        <a href="https://mail.google.com" target="_blank" class="btn btn-primary">
+            📩 Mở Gmail
+        </a>
+
+        <a href="http://localhost:8082/api/auth/login" class="btn btn-outline">
+            Đăng nhập
+        </a>
+    </div>
+
+    <div class="resend">
+        Không nhận được email?
+        <button id="resendBtn"
+                th:data-userid="${userId}"
+                onclick="resendEmail()"
+                style="display:none;">
+            🔄 Gửi lại
+        </button>
+        <span id="countdown"></span>
+    </div>
+
+    <div class="note">
+        Bạn cần thiết lập mật khẩu trước khi đăng nhập. Hãy kiểm tra cả Spam.
+    </div>
+</div>
+
+<script>
+    let timeLeft = 30;
+    const btn = document.getElementById("resendBtn");
+    const countdown = document.getElementById("countdown");
+
+    function startCountdown() {
+        btn.style.display = "none";
+        countdown.style.display = "inline";
+
+        const timer = setInterval(() => {
+            timeLeft--;
+            countdown.innerText = ` (${timeLeft}s)`;
+
+            if (timeLeft <= 0) {
+                clearInterval(timer);
+                btn.style.display = "inline-block";
+                countdown.style.display = "none";
+                timeLeft = 30;
+            }
+        }, 1000);
+    }
+
+    function resendEmail() {
+        const userId = btn.getAttribute("data-userid");
+
+        btn.innerHTML = "⏳ Đang gửi...";
+        btn.disabled = true;
+
+        fetch("http://localhost:8082/api/active-user/resend-active", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded"
+            },
+            body: `userId=${userId}`
+        })
+            .then(() => {
+                btn.innerHTML = "🔄 Gửi lại";
+                btn.disabled = false;
+                startCountdown();
+            })
+            .catch(() => {
+                btn.innerHTML = "🔄 Gửi lại";
+                btn.disabled = false;
+            });
+    }
+
+    startCountdown();
+</script>
+
 </body>
 </html>

@@ -86,7 +86,7 @@ public class AuthController {
             request.setLastName(lastName);
 
             User saveUser = userService.createUser(request);
-            return "redirect:http://localhost:80/notification-success?userId="
+            return "redirect:http://localhost:8082/api/auth/notification-success?userId="
                     + saveUser.getId() + "&email=" + saveUser.getEmail();
 
         } catch (Exception e) {
@@ -158,5 +158,7 @@ public class AuthController {
         model.addAttribute("email", email);
         return "notification-success";
     }
+
+
 
 }

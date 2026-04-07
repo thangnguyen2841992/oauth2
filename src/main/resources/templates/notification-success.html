@@ -141,6 +141,44 @@
             opacity: 1;
             transform: translateY(0);
         }
+        .resend {
+            margin-top: 15px;
+            font-size: 13px;
+            color: #6b7280;
+        }
+
+        .resend button {
+            padding: 6px 14px;
+            border-radius: 999px;
+            border: none;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            color: white;
+
+            transition: all 0.25s ease;
+            box-shadow: 0 4px 10px rgba(34, 197, 94, 0.3);
+        }
+
+        /* hover */
+        .resend button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 14px rgba(34, 197, 94, 0.4);
+        }
+
+        /* click */
+        .resend button:active {
+            transform: scale(0.96);
+        }
+
+        /* disabled */
+        .resend button:disabled {
+            background: #9ca3af;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 
@@ -172,7 +210,10 @@
         Không nhận được email?
         <button id="resendBtn"
                 th:data-userid="${userId}"
-                onclick="resendEmail()">
+                onclick="resendEmail()"
+                style="display: none;">
+            🔄 Gửi lại
+        </button>
         <span id="countdown"></span>
     </div>
 
@@ -187,7 +228,8 @@
     const countdown = document.getElementById("countdown");
 
     function startCountdown() {
-        btn.disabled = true;
+        btn.style.display = "none"; // Ẩn nút
+        countdown.style.display = "inline"; // Hiện countdown
 
         const timer = setInterval(() => {
             timeLeft--;
@@ -195,8 +237,9 @@
 
             if (timeLeft <= 0) {
                 clearInterval(timer);
-                btn.disabled = false;
-                countdown.innerText = "";
+                // 👉 Hết thời gian
+                btn.style.display = "inline-block"; // Hiện nút
+                countdown.style.display = "none";   // Ẩn countdown
                 timeLeft = 30;
             }
         }, 1000);
