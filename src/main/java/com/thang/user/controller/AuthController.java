@@ -8,12 +8,18 @@ import com.thang.user.service.user.IUserService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.client.RestTemplate;
 
 import java.io.IOException;
 
@@ -68,8 +74,7 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public String register(@RequestParam String username,
-                           @RequestParam String email,
+    public String register(@RequestParam String email,
                            @RequestParam String firstName,
                            @RequestParam String lastName,
                            @RequestParam(required = false) String birthday,
@@ -78,7 +83,6 @@ public class AuthController {
 
         try {
             CreateUserRequest request = new CreateUserRequest();
-            request.setUsername(username);
             request.setEmail(email);
             request.setDateOfBirth(birthday);
             request.setAddress(address);
@@ -159,6 +163,34 @@ public class AuthController {
         return "notification-success";
     }
 
+    @GetMapping("/reset-password")
+    public String resetPage(@RequestParam("key") String key, Model model) {
+        model.addAttribute("key", key);
+        return "reset-password";
+    }
 
 
+    @PostMapping("/reset-password")
+    public String handleReset(
+            @RequestParam String key,
+            @RequestParam String password
+    ) {
+        String url = "http://localhost:8180/realms/nihongo/login-actions/action-token?key=" + key;
+
+        RestTemplate restTemplate = new RestTemplate();
+
+        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+        body.add("password-new", password);
+        body.add("password-confirm", password);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+
+        HttpEntity<MultiValueMap<String, String>> request =
+                new HttpEntity<>(body, headers);
+
+        restTemplate.postForEntity(url, request, String.class);
+
+        return "redirect:http://localhost:8082/api/auth/login?resetSuccess=true";
+    }
 }

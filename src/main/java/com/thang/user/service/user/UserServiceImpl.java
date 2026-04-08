@@ -15,10 +15,7 @@ import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.core.Authentication;
@@ -73,7 +70,6 @@ public class UserServiceImpl implements IUserService {
     public User createUser(CreateUserRequest dto) {
         String activeCode = createActiveCode();
         User user = new User();
-        user.setUsername(dto.getUsername());
         user.setFirstName(dto.getFirstName());
         user.setLastName(dto.getLastName());
         user.setDateOfBirth(formatDateFromStringToDate(dto.getDateOfBirth()));
@@ -167,6 +163,24 @@ public class UserServiceImpl implements IUserService {
         return token;
     }
 
+    @Override
+    public void sendResetPassword(String userId, String password,String token) {
+        String url = "http://localhost:8180/admin/realms/nihongo/users/" + userId + "/reset-password";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(token); // 👈 token admin
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("type", "password");
+        body.put("value", password);
+        body.put("temporary", false);
+
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+
+        new RestTemplate().exchange(url, HttpMethod.PUT, request, String.class);
+    }
+
     public String extractClaim(String token, String claim) {
         try {
             String[] parts = token.split("\\.");
@@ -217,7 +231,7 @@ public class UserServiceImpl implements IUserService {
         try {
             var response = identityClient.createNewUser(
                     UserCreationParam.builder()
-                            .username(user.getUsername())
+                            .username(user.getEmail())
                             .firstName(user.getFirstName())
                             .lastName(user.getLastName())
                             .email(user.getEmail())
@@ -230,14 +244,7 @@ public class UserServiceImpl implements IUserService {
             String keycloakUserId = extractUserId(response);
 
             assignDefaultRole(keycloakUserId, "USER");
-
-
-
-            identityClient.executeActionsEmail(
-                    "Bearer " + token,
-                    keycloakUserId,
-                    List.of("UPDATE_PASSWORD")
-            );
+            sendResetPassword(keycloakUserId,"thuThuy@1", token);
 
             user.setActive(true);
             user.setUserId(keycloakUserId);
@@ -321,7 +328,6 @@ public class UserServiceImpl implements IUserService {
 
         User user = new User();
         user.setEmail(email);
-        user.setUsername(username);
         user.setFirstName(firstName);
         user.setLastName(lastName);
 
@@ -406,7 +412,6 @@ public class UserServiceImpl implements IUserService {
 
     private UserDTO mapperUserToUserDTO(User user) {
         UserDTO dto = new UserDTO();
-        dto.setUsername(user.getUsername());
         dto.setFirstName(user.getFirstName());
         dto.setLastName(user.getLastName());
         dto.setPhoneNumber(user.getPhoneNumber());

@@ -70,22 +70,12 @@
     </div>
 
     <form th:action="@{http://localhost:8082/api/auth/register}" method="post">
-
-        <!-- Username -->
+        <!-- Email -->
         <div class="mb-3">
-            <label class="form-label">Tên đăng nhập</label>
+            <label class="form-label">Email</label>
             <div class="input-group">
-                <span class="input-group-text"><i class="bi bi-person"></i></span>
-                <input type="text" name="username" class="form-control" placeholder="Nhập username" required>
-            </div>
-        </div>
-
-        <!-- First Name -->
-        <div class="mb-3">
-            <label class="form-label">Tên</label>
-            <div class="input-group">
-                <span class="input-group-text"><i class="bi bi-person-badge"></i></span>
-                <input type="text" name="firstName" class="form-control" placeholder="Nhập tên" required>
+                <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                <input type="email" name="email" class="form-control" placeholder="Nhập email" required>
             </div>
         </div>
 
@@ -98,14 +88,16 @@
             </div>
         </div>
 
-        <!-- Email -->
+        <!-- First Name -->
         <div class="mb-3">
-            <label class="form-label">Email</label>
+            <label class="form-label">Tên</label>
             <div class="input-group">
-                <span class="input-group-text"><i class="bi bi-envelope"></i></span>
-                <input type="email" name="email" class="form-control" placeholder="Nhập email" required>
+                <span class="input-group-text"><i class="bi bi-person-badge"></i></span>
+                <input type="text" name="firstName" class="form-control" placeholder="Nhập tên" required>
             </div>
         </div>
+
+
         <!-- Birthday -->
         <div class="mb-3">
             <label class="form-label">Ngày sinh</label>

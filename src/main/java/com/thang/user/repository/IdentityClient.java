@@ -50,7 +50,10 @@ public interface IdentityClient {
     void executeActionsEmail(
             @RequestHeader("Authorization") String token,
             @PathVariable String userId,
-            @RequestBody List<String> actions
+            @RequestBody List<String> actions,
+            @RequestParam("client_id") String clientId,
+            @RequestParam("redirect_uri") String redirectUri,
+            @RequestParam("lifespan") Integer lifespan
     );
     @GetMapping("/admin/realms/${spring.idp.realm}/roles/{roleName}")
     GetRoleIdResponse getRealmRole(

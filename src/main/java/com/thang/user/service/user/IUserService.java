@@ -45,4 +45,5 @@ public interface IUserService {
 
     TokenUserResponse exchangeCodeToToken(String code);
     TokenUserResponse handleOAuth2Login(String code);
+     void sendResetPassword(String userId, String password,String token);
 }

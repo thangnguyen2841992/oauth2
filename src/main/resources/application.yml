@@ -23,7 +23,7 @@ spring:
     # company
 #    client-secret: pqdSBRdyDoAUTNBmXQcjoQpWhCL4a36R
     #home
-    client-secret: sawhOBfAfp6pzKVGVxreMvlTcMxFmzXN
+    client-secret: DoJs3BI1BiKCzaf9rRWvxpVPsilWoKcU
     realm: nihongo
 
   security:

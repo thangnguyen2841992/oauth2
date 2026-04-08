@@ -6,10 +6,15 @@ services:
     container_name: keycloak-25.0.0
     ports:
       - "8180:8080"
+
     environment:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_THEME_CACHE_THEMES: "false"
+      KC_THEME_CACHE_TEMPLATES: "false"
+
     command: start-dev
+
     volumes:
       - ./themes:/opt/keycloak/themes
 
@@ -21,3 +26,4 @@ services:
 #  docker exec -it redis redis-cli
 
 #  KEYS *
+#  docker compose -f docker-compose-provider.yml logs -f keycloak
