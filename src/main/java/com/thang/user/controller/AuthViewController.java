@@ -1,11 +1,18 @@
 package com.thang.user.controller;
 
+import com.thang.user.model.dto.CreateUserRequest;
 import com.thang.user.service.user.IUserService;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate;
 
 import java.io.IOException;
 
@@ -27,8 +34,8 @@ public class AuthViewController {
         String result = userService.activeUser(userId, activeCode);
 
         return switch (result) {
-            case "SUCCESS" -> "redirect:http://localhost:8082/api/active-user/active-success?userId="
-                    + userId + "&email=" + email;
+            case "SUCCESS" -> "redirect:http://localhost:8082/api/active-user/updatePassword?email="
+                    + email;
             case "EXPIRED" -> {
                 model.addAttribute("userId", userId);
                 yield "active-expired";
@@ -39,24 +46,28 @@ public class AuthViewController {
         };
     }
 
-    @GetMapping("/active-success")
-    public String viewActiveSuccess(@RequestParam Long userId,
-                                    @RequestParam String email,
-                                    Model model) {
-        model.addAttribute("userId", userId);
+    @GetMapping("/updatePassword")
+    public String resetPage(@RequestParam("email") String email, Model model) {
         model.addAttribute("email", email);
-        return "active-success";
+        return "reset-password";
     }
 
-    @PostMapping("/resend-active")
-    @ResponseBody
-    public ResponseEntity<String> resendActive(@RequestParam(required = false) Long userId) {
 
-        if (userId == null) {
-            return ResponseEntity.badRequest().body("Missing userId");
+    @PostMapping("/updatePassword")
+    public String updatePassword(
+            @RequestParam String password,
+            @RequestParam String confirmPassword,
+            @RequestParam String email
+    ) {
+        CreateUserRequest userRequest = new CreateUserRequest();
+        userRequest.setEmail(email);
+        userRequest.setPassword(password);
+        userRequest.setConfirmPassword(confirmPassword);
+        String result = this.userService.updatePassword(userRequest);
+        if (result.equals("SUCCESS")) {
+            return "redirect:http://localhost:8082/api/auth/login";
         }
-
-        return ResponseEntity.ok(userService.resendActiveCode(userId));
+        return "reset-password";
     }
 
 

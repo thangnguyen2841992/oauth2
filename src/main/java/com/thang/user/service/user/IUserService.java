@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 public interface IUserService {
-    User createUser(CreateUserRequest dto);
+    User createUser(CreateUserRequest dto) throws Exception;
 
     List<UserDTO> getAllUsers();
 
@@ -46,4 +46,5 @@ public interface IUserService {
     TokenUserResponse exchangeCodeToToken(String code);
     TokenUserResponse handleOAuth2Login(String code);
      void sendResetPassword(String userId, String password,String token);
+     String updatePassword(CreateUserRequest request);
 }

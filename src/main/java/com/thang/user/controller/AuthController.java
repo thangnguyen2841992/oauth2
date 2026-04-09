@@ -39,14 +39,14 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public String login(@RequestParam String username,
+    public String login(@RequestParam String email,
                         @RequestParam String password,
                         HttpServletResponse response,
                         Model model) {
 
         try {
             LoginRequest request = new LoginRequest();
-            request.setUsername(username);
+            request.setEmail(email);
             request.setPassword(password);
 
             TokenUserResponse res = userService.login(request);
@@ -163,34 +163,4 @@ public class AuthController {
         return "notification-success";
     }
 
-    @GetMapping("/reset-password")
-    public String resetPage(@RequestParam("key") String key, Model model) {
-        model.addAttribute("key", key);
-        return "reset-password";
-    }
-
-
-    @PostMapping("/reset-password")
-    public String handleReset(
-            @RequestParam String key,
-            @RequestParam String password
-    ) {
-        String url = "http://localhost:8180/realms/nihongo/login-actions/action-token?key=" + key;
-
-        RestTemplate restTemplate = new RestTemplate();
-
-        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
-        body.add("password-new", password);
-        body.add("password-confirm", password);
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-
-        HttpEntity<MultiValueMap<String, String>> request =
-                new HttpEntity<>(body, headers);
-
-        restTemplate.postForEntity(url, request, String.class);
-
-        return "redirect:http://localhost:8082/api/auth/login?resetSuccess=true";
-    }
 }

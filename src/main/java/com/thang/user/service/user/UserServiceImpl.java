@@ -19,6 +19,7 @@ import org.springframework.http.*;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
@@ -31,6 +32,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.regex.Pattern;
 
 @Service
 @Slf4j
@@ -42,6 +44,7 @@ public class UserServiceImpl implements IUserService {
     private final RoleCacheService roleCacheService;
     private final RedisTemplate<String, String> redisTemplate;
     private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final PasswordEncoder passwordEncoder;
 
 
     @Value("${spring.idp.client-id}")
@@ -52,7 +55,7 @@ public class UserServiceImpl implements IUserService {
     @NonFinal
     private String clientSecret;
 
-    public UserServiceImpl(IUserRepository userRepository, IdentityClient identityClient, TokenCacheService tokenCacheService, ClientUuidCacheService clientUuidCacheService, RoleCacheService roleCacheService, RedisTemplate<String, String> redisTemplate, KafkaTemplate<String, Object> kafkaTemplate) {
+    public UserServiceImpl(IUserRepository userRepository, IdentityClient identityClient, TokenCacheService tokenCacheService, ClientUuidCacheService clientUuidCacheService, RoleCacheService roleCacheService, RedisTemplate<String, String> redisTemplate, KafkaTemplate<String, Object> kafkaTemplate, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.identityClient = identityClient;
         this.tokenCacheService = tokenCacheService;
@@ -60,6 +63,7 @@ public class UserServiceImpl implements IUserService {
         this.roleCacheService = roleCacheService;
         this.redisTemplate = redisTemplate;
         this.kafkaTemplate = kafkaTemplate;
+        this.passwordEncoder = passwordEncoder;
     }
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
@@ -67,7 +71,11 @@ public class UserServiceImpl implements IUserService {
 
 
     @Override
-    public User createUser(CreateUserRequest dto) {
+    public User createUser(CreateUserRequest dto) throws Exception {
+        boolean isExistEmail = this.userRepository.existsByEmail(dto.getEmail());
+        if (isExistEmail) {
+            throw new Exception("Email đã tồn tại");
+        }
         String activeCode = createActiveCode();
         User user = new User();
         user.setFirstName(dto.getFirstName());
@@ -131,12 +139,20 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     public TokenUserResponse login(LoginRequest loginRequest) {
+
+        User user = userRepository.findByEmail(loginRequest.getEmail())
+                .orElseThrow(() -> new RuntimeException("Tài khoản hoặc mật khẩu không đúng"));
+
+        if (!passwordEncoder.matches(loginRequest.getPassword(), user.getPassword())) {
+            throw new RuntimeException("Tài khoản hoặc mật khẩu không đúng");
+        }
+
         return identityClient.login(LoginUsingKeyCloakParam.builder()
                 .grant_type("password")
                 .client_secret(clientSecret)
                 .client_id(clientId)
                 .scope("openid")
-                .username(loginRequest.getUsername())
+                .username(loginRequest.getEmail())
                 .password(loginRequest.getPassword())
                 .build());
     }
@@ -144,27 +160,19 @@ public class UserServiceImpl implements IUserService {
     @Override
     public TokenUserResponse handleOAuth2Login(String code) {
 
-        // 1. exchange code -> token
         TokenUserResponse token = this.exchangeCodeToToken(code);
-
         String accessToken = token.getAccess_token();
-
-        // 2. decode JWT
         String email = extractClaim(accessToken, "email");
         String name = extractClaim(accessToken, "name");
         String sub = extractClaim(accessToken, "sub");
 
-        // split name nếu cần
         String lastName = "";
-
-        // 3. create/update user DB
         createUserFromGoogle(email, name, lastName, sub);
-
         return token;
     }
 
     @Override
-    public void sendResetPassword(String userId, String password,String token) {
+    public void sendResetPassword(String userId, String password, String token) {
         String url = "http://localhost:8180/admin/realms/nihongo/users/" + userId + "/reset-password";
 
         HttpHeaders headers = new HttpHeaders();
@@ -179,6 +187,33 @@ public class UserServiceImpl implements IUserService {
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
         new RestTemplate().exchange(url, HttpMethod.PUT, request, String.class);
+    }
+
+    @Override
+    public String updatePassword(CreateUserRequest request) {
+        if (!isValidPassword(request.getPassword())) {
+            return "Password not validation";
+        }
+        if (!request.getConfirmPassword().equals(request.getPassword())) {
+            return "Password not matches";
+        }
+        Optional<User> userOptional = this.userRepository.findByEmail(request.getEmail());
+        if (userOptional.isPresent()) {
+            User user = userOptional.get();
+            var token = tokenCacheService.getClientToken();
+            sendResetPassword(user.getUserId(), "thuThuy@1", token);
+            user.setPassword(passwordEncoder.encode(request.getPassword()));
+            user.setDateModified(new Date());
+            this.userRepository.save(user);
+        }
+        return "SUCCESS";
+    }
+
+    public static boolean isValidPassword(String password) {
+        // Regex pattern
+        String regex = "^(?=.*[0-9])(?=.*[A-Z])(?=.*[@#$%^&+=!])(?=.{8,}).*";
+        Pattern pattern = Pattern.compile(regex);
+        return pattern.matcher(password).matches();
     }
 
     public String extractClaim(String token, String claim) {
@@ -244,7 +279,6 @@ public class UserServiceImpl implements IUserService {
             String keycloakUserId = extractUserId(response);
 
             assignDefaultRole(keycloakUserId, "USER");
-            sendResetPassword(keycloakUserId,"thuThuy@1", token);
 
             user.setActive(true);
             user.setUserId(keycloakUserId);
@@ -311,11 +345,8 @@ public class UserServiceImpl implements IUserService {
                                      String keycloakUserId) {
 
         Optional<User> userOpt = userRepository.findByEmail(email);
-        String username = email.split("@")[0];
         if (userOpt.isPresent()) {
             User user = userOpt.get();
-
-            // 🔥 update nếu chưa có userId
             if (user.getUserId() == null) {
                 user.setUserId(keycloakUserId);
             }
@@ -331,7 +362,7 @@ public class UserServiceImpl implements IUserService {
         user.setFirstName(firstName);
         user.setLastName(lastName);
 
-        user.setUserId(keycloakUserId); // 🔥 QUAN TRỌNG
+        user.setUserId(keycloakUserId);
 
         user.setActive(true);
         user.setProvider("GOOGLE");
@@ -339,14 +370,8 @@ public class UserServiceImpl implements IUserService {
         user.setDateCreated(new Date());
         user.setDateModified(new Date());
 
-        // 👉 default role
         user.setRoleName("USER");
         assignDefaultRole(keycloakUserId, "USER");
-//        identityClient.executeActionsEmail(
-//                "Bearer " + token,
-//                keycloakUserId,
-//                List.of("UPDATE_PASSWORD")
-//        );
         userRepository.save(user);
     }
 
@@ -361,7 +386,6 @@ public class UserServiceImpl implements IUserService {
                 List.of(role)
         );
     }
-
 
     private Date formatDateFromStringToDate(String date) {
         LocalDate localDate = LocalDate.parse(date);

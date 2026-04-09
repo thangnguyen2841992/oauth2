@@ -25,6 +25,7 @@ public class User {
     private String lastName;
     private Date dateOfBirth;
     private String email;
+    private String password;
     private String phoneNumber;
     private String address;
     private Date dateCreated;
