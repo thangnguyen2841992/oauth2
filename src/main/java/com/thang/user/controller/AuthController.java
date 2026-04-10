@@ -130,7 +130,7 @@ public class AuthController {
         CookieUtils.clear(response, "accessToken");
         CookieUtils.clear(response, "refreshToken");
 
-        return "redirect:/http://localhost:8082/api/authlogin";
+        return "redirect:http://localhost:8082/api/auth/login";
     }
 
     @GetMapping("/callbackGoogle")

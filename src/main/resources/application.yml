@@ -21,9 +21,9 @@ spring:
     url: http://localhost:8180
     client-id: japanese_app
     # company
-    client-secret: KL3QoB3145oUkIfyNfnbZzBDd3vY8JcD
+#    client-secret: KL3QoB3145oUkIfyNfnbZzBDd3vY8JcD
     #home
-#    client-secret: DoJs3BI1BiKCzaf9rRWvxpVPsilWoKcU
+    client-secret: DoJs3BI1BiKCzaf9rRWvxpVPsilWoKcU
     realm: nihongo
 
   security:
@@ -49,8 +49,6 @@ eureka:
     fetch-registry: true
     service-url:
       defaultZone: http://localhost:8761/eureka
-
-
 
 api:
   key: thangdeptrai
