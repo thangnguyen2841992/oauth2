@@ -14,6 +14,7 @@ public class UserDTO {
     private String userId;
     private String firstName;
     private String lastName;
+    private String fullName;
     private String dateOfBirth;
     private String email;
     private String phoneNumber;

@@ -3,7 +3,6 @@ package com.thang.user.service.user;
 import com.thang.user.model.dto.identity.GetUuidClientResponse;
 import com.thang.user.repository.IdentityClient;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 

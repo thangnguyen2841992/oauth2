@@ -63,7 +63,7 @@
 
         <!-- Nếu đã login -->
         <div th:if="${isLoggedIn}">
-            <span class="me-3">Xin chào, <b th:text="${username}">User</b></span>
+            <span class="me-3">Xin chào, <b th:text="${name}">User</b></span>
             <a href="http://localhost:8082/api/auth/logout" class="btn btn-outline-danger btn-sm">Logout</a>
         </div>
 

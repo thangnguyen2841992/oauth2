@@ -16,8 +16,10 @@ public class UserKeyCloakResponse {
     String createdTimestamp;
     String enabled;
     String totp;
-//    String disableableCredentialTypes;
+    //    String disableableCredentialTypes;
     String notBefore;
 
     Access access;
+
+    String identityProvider;
 }

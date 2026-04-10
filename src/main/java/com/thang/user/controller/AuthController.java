@@ -2,24 +2,19 @@ package com.thang.user.controller;
 
 import com.thang.user.model.dto.CreateUserRequest;
 import com.thang.user.model.dto.LoginRequest;
+import com.thang.user.model.dto.UserDTO;
 import com.thang.user.model.dto.identity.TokenUserResponse;
 import com.thang.user.model.entity.User;
 import com.thang.user.service.user.IUserService;
+import com.thang.user.utils.CookieUtils;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
+import org.apache.catalina.UserDatabase;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
 
@@ -39,32 +34,31 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public String login(@RequestParam String email,
-                        @RequestParam String password,
-                        HttpServletResponse response,
-                        Model model) {
-
+    public ResponseEntity<?> login(@RequestBody LoginRequest request,
+                                   HttpServletResponse response) {
         try {
-            LoginRequest request = new LoginRequest();
-            request.setEmail(email);
-            request.setPassword(password);
-
             TokenUserResponse res = userService.login(request);
 
             String token = res.getAccess_token();
 
-            Cookie cookie = new Cookie("accessToken", token);
-            cookie.setHttpOnly(true);
-            cookie.setPath("/");
-            cookie.setMaxAge(60 * 60);
+            Cookie accessToken = new Cookie("accessToken", token);
+            accessToken.setHttpOnly(true);
+            accessToken.setPath("/");
+            accessToken.setMaxAge(60 * 60);
 
-            response.addCookie(cookie);
 
-            return "redirect:http://localhost:8082/api/auth/home";
+            Cookie refresh = new Cookie("refreshToken", res.getRefresh_token());
+            refresh.setHttpOnly(true);
+            refresh.setPath("/");
+            refresh.setMaxAge(60 * 60);
+
+            response.addCookie(accessToken);
+            response.addCookie(refresh);
+
+            return ResponseEntity.ok().build();
 
         } catch (Exception e) {
-            model.addAttribute("error", "Sai tài khoản hoặc mật khẩu!");
-            return "login";
+            return ResponseEntity.status(401).body("Sai tài khoản hoặc mật khẩu");
         }
     }
 
@@ -113,8 +107,8 @@ public class AuthController {
         }
 
         if (token != null) {
-            String username = this.userService.extractUsername(token);
-            model.addAttribute("username", username);
+            UserDTO userDTO = this.userService.extractUsername(token);
+            model.addAttribute("name", userDTO.getFullName());
             model.addAttribute("isLoggedIn", true);
         } else {
             model.addAttribute("isLoggedIn", false);
@@ -124,16 +118,19 @@ public class AuthController {
     }
 
     @GetMapping("/logout")
-    public String logout(HttpServletResponse response) {
+    public String logout(HttpServletRequest request,
+                         HttpServletResponse response) {
 
-        Cookie cookie = new Cookie("accessToken", null);
-        cookie.setHttpOnly(true);
-        cookie.setPath("/");
-        cookie.setMaxAge(0);
+        String refreshToken = CookieUtils.get(request, "refreshToken");
 
-        response.addCookie(cookie);
+        if (refreshToken != null) {
+            this.userService.logout(refreshToken);
+        }
 
-        return "redirect:http://localhost:8082/api/auth/login";
+        CookieUtils.clear(response, "accessToken");
+        CookieUtils.clear(response, "refreshToken");
+
+        return "redirect:/http://localhost:8082/api/authlogin";
     }
 
     @GetMapping("/callbackGoogle")
@@ -162,5 +159,12 @@ public class AuthController {
         model.addAttribute("email", email);
         return "notification-success";
     }
+
+    @GetMapping("/checkEmail")
+    @ResponseBody
+    public String checkEmailWhenLogin(@RequestParam String email) {
+        return this.userService.checkEmailWhenLogin(email);
+    }
+
 
 }

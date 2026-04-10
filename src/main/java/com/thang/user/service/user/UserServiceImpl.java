@@ -9,24 +9,18 @@ import com.thang.user.model.dto.identity.*;
 import com.thang.user.model.entity.User;
 import com.thang.user.repository.IUserRepository;
 import com.thang.user.repository.IdentityClient;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.*;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.scheduling.annotation.Async;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
-import java.io.IOException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -209,6 +203,27 @@ public class UserServiceImpl implements IUserService {
         return "SUCCESS";
     }
 
+    @Override
+    public String checkEmailWhenLogin(String email) {
+
+        String token = tokenCacheService.getClientToken();
+
+        return identityClient.findUserByEmail("Bearer " + token, email)
+                .stream()
+                .findFirst()
+                .map(user -> {
+                    List<UserKeyCloakResponse> identities =
+                            identityClient.federatedIdentity("Bearer " + token, user.getId());
+
+                    if (identities == null || identities.isEmpty()) {
+                        return "LOCAL";
+                    }
+
+                    return identities.get(0).getIdentityProvider().toUpperCase();
+                })
+                .orElse("NOT_FOUND");
+    }
+
     public static boolean isValidPassword(String password) {
         // Regex pattern
         String regex = "^(?=.*[0-9])(?=.*[A-Z])(?=.*[@#$%^&+=!])(?=.{8,}).*";
@@ -323,7 +338,7 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
-    public String extractUsername(String token) {
+    public UserDTO extractUsername(String token) {
         try {
             String[] parts = token.split("\\.");
 
@@ -331,11 +346,36 @@ public class UserServiceImpl implements IUserService {
 
             ObjectMapper mapper = new ObjectMapper();
             Map map = mapper.readValue(payload, Map.class);
-
-            return (String) map.get("preferred_username");
+            UserDTO newUserDto = new UserDTO();
+            newUserDto.setEmail((String) map.get("email"));
+            newUserDto.setFullName((String) map.get("name"));
+            return newUserDto;
         } catch (Exception e) {
             return null;
         }
+    }
+
+    @Override
+    public void logout(String refreshToken) {
+
+        RestTemplate rest = new RestTemplate();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+
+        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+        body.add("client_id", "japanese_app");
+        body.add("client_secret", clientSecret);
+        body.add("refresh_token", refreshToken);
+
+        HttpEntity<MultiValueMap<String, String>> request =
+                new HttpEntity<>(body, headers);
+
+        rest.postForEntity(
+                "http://localhost:8180/realms/nihongo/protocol/openid-connect/logout",
+                request,
+                String.class
+        );
     }
 
     @Override

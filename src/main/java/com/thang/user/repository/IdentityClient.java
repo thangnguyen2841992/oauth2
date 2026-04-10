@@ -35,6 +35,12 @@ public interface IdentityClient {
     @GetMapping(value = "/admin/realms/${spring.idp.realm}/users?exact=false")
     List<UserKeyCloakResponse> getAllUsersKeyCloak(@RequestHeader("authorization") String token);
 
+    @GetMapping(value = "/admin/realms/${spring.idp.realm}/users")
+    List<UserKeyCloakResponse> findUserByEmail(@RequestHeader("authorization") String token, @RequestParam("email") String email);
+
+    @GetMapping(value = "/admin/realms/${spring.idp.realm}/users/{userId}/federated-identity")
+    List<UserKeyCloakResponse> federatedIdentity(@RequestHeader("authorization") String token, @PathVariable String userId);
+
 
     @GetMapping(value = "/admin/realms/${spring.idp.realm}/clients?clientId=${spring.idp.client-id}")
     List<GetUuidClientResponse> getUuidClient(@RequestHeader("authorization") String token);
@@ -55,11 +61,13 @@ public interface IdentityClient {
             @RequestParam("redirect_uri") String redirectUri,
             @RequestParam("lifespan") Integer lifespan
     );
+
     @GetMapping("/admin/realms/${spring.idp.realm}/roles/{roleName}")
     GetRoleIdResponse getRealmRole(
             @RequestHeader("authorization") String token,
             @PathVariable String roleName
     );
+
     @PostMapping("/admin/realms/${spring.idp.realm}/users/{userId}/role-mappings/realm")
     void mappingRealmRoleToUser(
             @RequestHeader("authorization") String token,

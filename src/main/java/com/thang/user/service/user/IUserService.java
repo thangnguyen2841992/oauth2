@@ -6,11 +6,7 @@ import com.thang.user.model.dto.UserDTO;
 import com.thang.user.model.dto.identity.TokenUserResponse;
 import com.thang.user.model.dto.identity.UserKeyCloakResponse;
 import com.thang.user.model.entity.User;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.security.core.Authentication;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
@@ -35,7 +31,7 @@ public interface IUserService {
 
     String resendActiveCode(long userId);
 
-    String extractUsername(String token);
+    UserDTO extractUsername(String token);
 
     void createUserFromGoogle(String email,
                               String firstName,
@@ -47,4 +43,6 @@ public interface IUserService {
     TokenUserResponse handleOAuth2Login(String code);
      void sendResetPassword(String userId, String password,String token);
      String updatePassword(CreateUserRequest request);
+     String checkEmailWhenLogin(String email);
+    void logout(String refreshToken);
 }
