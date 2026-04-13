@@ -289,14 +289,41 @@
             method: "POST",
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({email, password})
+        }).then(res => {
+            if (res.ok) {
+                return res.headers.get("Authorization"); // ❌ bạn chưa trả → fix bên dưới
+            } else {
+                throw new Error();
+            }
         })
-            .then(res => {
-                if (res.ok) {
-                    window.location.href = "http://localhost:8082/api/auth/home";
+            .then(token => {
+                const payload = parseJwt(token);
+
+                const roles = payload.realm_access.roles;
+
+                if (roles.includes("ADMIN")) {
+                    window.location.href = "http://localhost:8082/api/admin/hone";
                 } else {
-                    document.getElementById("error").innerText = "Sai mật khẩu";
+                    window.location.href = "http://localhost:8082/api/auth/home";
                 }
+            })
+            .catch(() => {
+                document.getElementById("error").innerText = "Sai mật khẩu";
             });
+
+
+
+
+            // .then(res => {
+            //     if (res.ok) {
+            //         window.location.href = "http://localhost:8082/api/auth/home";
+            //     } else {
+            //         document.getElementById("error").innerText = "Sai mật khẩu";
+            //     }
+            // });
+    }
+    function parseJwt(token) {
+        return JSON.parse(atob(token.split('.')[1]));
     }
 </script>
 

@@ -12,6 +12,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.apache.catalina.UserDatabase;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
@@ -55,7 +56,8 @@ public class AuthController {
             response.addCookie(accessToken);
             response.addCookie(refresh);
 
-            return ResponseEntity.ok().build();
+            return ResponseEntity.ok().header("Authorization", "Bearer " + res.getAccess_token())
+                    .build();
 
         } catch (Exception e) {
             return ResponseEntity.status(401).body("Sai tài khoản hoặc mật khẩu");
@@ -164,6 +166,12 @@ public class AuthController {
     @ResponseBody
     public String checkEmailWhenLogin(@RequestParam String email) {
         return this.userService.checkEmailWhenLogin(email);
+    }
+
+    @GetMapping("/getName")
+    @ResponseBody
+    public String getName(Jwt jwt) {
+        return jwt.getClaim("name");
     }
 
 
