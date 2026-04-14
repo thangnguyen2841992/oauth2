@@ -10,7 +10,8 @@ import com.thang.user.utils.CookieUtils;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.apache.catalina.UserDatabase;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Controller;
@@ -35,28 +36,29 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequest request,
-                                   HttpServletResponse response) {
+    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
         try {
             TokenUserResponse res = userService.login(request);
 
-            String token = res.getAccess_token();
+            ResponseCookie accessToken = ResponseCookie.from("accessToken", res.getAccess_token())
+                    .httpOnly(true)
+                    .path("/")
+                    .maxAge(60 * 60)
+                    .sameSite("Lax")   // 🔥 QUAN TRỌNG
+                    .secure(false)      // localhost dùng false
+                    .build();
 
-            Cookie accessToken = new Cookie("accessToken", token);
-            accessToken.setHttpOnly(true);
-            accessToken.setPath("/");
-            accessToken.setMaxAge(60 * 60);
+            ResponseCookie refreshToken = ResponseCookie.from("refreshToken", res.getRefresh_token())
+                    .httpOnly(true)
+                    .path("/")
+                    .maxAge(60 * 60)
+                    .sameSite("Lax")
+                    .secure(false)
+                    .build();
 
-
-            Cookie refresh = new Cookie("refreshToken", res.getRefresh_token());
-            refresh.setHttpOnly(true);
-            refresh.setPath("/");
-            refresh.setMaxAge(60 * 60);
-
-            response.addCookie(accessToken);
-            response.addCookie(refresh);
-
-            return ResponseEntity.ok().header("Authorization", "Bearer " + res.getAccess_token())
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.SET_COOKIE, accessToken.toString())
+                    .header(HttpHeaders.SET_COOKIE, refreshToken.toString())
                     .build();
 
         } catch (Exception e) {
