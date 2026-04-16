@@ -9,6 +9,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDateTime;
 import java.util.Date;
 
 @Entity
@@ -23,16 +24,16 @@ public class User {
     private String userId;
     private String firstName;
     private String lastName;
-    private Date dateOfBirth;
+    private LocalDateTime dateOfBirth;
     private String email;
     private String password;
     private String phoneNumber;
     private String address;
-    private Date dateCreated;
-    private Date dateModified;
+    private LocalDateTime dateCreated;
+    private LocalDateTime dateModified;
     private String roleName;
     private boolean isActive;
     private String codeActive;
-    private Date codeActiveExpiredAt;
+    private LocalDateTime codeActiveExpiredAt;
     private String provider; // LOCAL, GOOGLE
 }

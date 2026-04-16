@@ -13,14 +13,13 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
+import java.util.Map;
 
-@Controller
+@RestController
 @RequestMapping("/api/auth")
 public class AuthController {
 
@@ -28,11 +27,6 @@ public class AuthController {
 
     public AuthController(IUserService userService) {
         this.userService = userService;
-    }
-
-    @GetMapping("/login")
-    public String showLoginForm() {
-        return "login";
     }
 
     @PostMapping("/login")
@@ -44,8 +38,8 @@ public class AuthController {
                     .httpOnly(true)
                     .path("/")
                     .maxAge(60 * 60)
-                    .sameSite("Lax")   // 🔥 QUAN TRỌNG
-                    .secure(false)      // localhost dùng false
+                    .sameSite("Lax")
+                    .secure(false)
                     .build();
 
             ResponseCookie refreshToken = ResponseCookie.from("refreshToken", res.getRefresh_token())
@@ -59,49 +53,38 @@ public class AuthController {
             return ResponseEntity.ok()
                     .header(HttpHeaders.SET_COOKIE, accessToken.toString())
                     .header(HttpHeaders.SET_COOKIE, refreshToken.toString())
-                    .build();
+                    .body(Map.of(
+                            "message", "Login success"
+                    ));
 
         } catch (Exception e) {
-            return ResponseEntity.status(401).body("Sai tài khoản hoặc mật khẩu");
+            return ResponseEntity.status(401).body(Map.of(
+                    "message", "Sai tài khoản hoặc mật khẩu"
+            ));
         }
-    }
-
-    @GetMapping("/register")
-    public String showRegisterForm() {
-        return "register";
     }
 
     @PostMapping("/register")
-    public String register(@RequestParam String email,
-                           @RequestParam String firstName,
-                           @RequestParam String lastName,
-                           @RequestParam(required = false) String birthday,
-                           @RequestParam(required = false) String address,
-                           Model model) {
+    public ResponseEntity<?> register(@RequestBody CreateUserRequest request) {
 
         try {
-            CreateUserRequest request = new CreateUserRequest();
-            request.setEmail(email);
-            request.setDateOfBirth(birthday);
-            request.setAddress(address);
-            request.setFirstName(firstName);
-            request.setLastName(lastName);
-
             User saveUser = userService.createUser(request);
-            return "redirect:http://localhost:8082/api/auth/notification-success?userId="
-                    + saveUser.getId() + "&email=" + saveUser.getEmail();
+
+            return ResponseEntity.ok(
+                    Map.of(
+                            "userId", saveUser.getId(),
+                            "email", saveUser.getEmail()
+                    )
+            );
 
         } catch (Exception e) {
-            model.addAttribute("error", "Đăng ký thất bại!");
-            return "register";
+            return ResponseEntity.status(400).body("Đăng ký thất bại!");
         }
     }
 
-    @GetMapping("/home")
-    public String home(HttpServletRequest request, Model model) {
-
+    @GetMapping("/checkLogin")
+    public ResponseEntity<?> checkLogin(HttpServletRequest request) {
         String token = null;
-
         if (request.getCookies() != null) {
             for (Cookie cookie : request.getCookies()) {
                 if ("accessToken".equals(cookie.getName())) {
@@ -109,32 +92,43 @@ public class AuthController {
                 }
             }
         }
-
         if (token != null) {
-            UserDTO userDTO = this.userService.extractUsername(token);
-            model.addAttribute("name", userDTO.getFullName());
-            model.addAttribute("isLoggedIn", true);
-        } else {
-            model.addAttribute("isLoggedIn", false);
-        }
+            try {
+                UserDTO userDTO = userService.extractUsername(token);
 
-        return "home";
+                return ResponseEntity.ok(
+                        Map.of(
+                                "isLoggedIn", true,
+                                "name", userDTO.getFullName()
+                        )
+                );
+            } catch (Exception e) {
+                return ResponseEntity.ok(
+                        Map.of("isLoggedIn", false)
+                );
+            }
+        }
+        return ResponseEntity.ok(
+                Map.of("isLoggedIn", false)
+        );
     }
 
     @GetMapping("/logout")
-    public String logout(HttpServletRequest request,
-                         HttpServletResponse response) {
+    public ResponseEntity<?> logout(HttpServletRequest request,
+                                    HttpServletResponse response) {
 
         String refreshToken = CookieUtils.get(request, "refreshToken");
 
         if (refreshToken != null) {
-            this.userService.logout(refreshToken);
+            userService.logout(refreshToken);
         }
 
         CookieUtils.clear(response, "accessToken");
         CookieUtils.clear(response, "refreshToken");
 
-        return "redirect:http://localhost:8082/api/auth/login";
+        return ResponseEntity.ok(Map.of(
+                "message", "Logout success"
+        ));
     }
 
     @GetMapping("/callbackGoogle")
@@ -147,34 +141,22 @@ public class AuthController {
 
         Cookie cookie = new Cookie("accessToken", accessToken);
         cookie.setHttpOnly(true);
+        cookie.setSecure(false);
         cookie.setPath("/");
         cookie.setMaxAge(3600);
 
         response.addCookie(cookie);
 
-        response.sendRedirect("http://localhost:8082/api/auth/home");
-    }
-
-    @GetMapping("/notification-success")
-    public String view(@RequestParam Long userId,
-                       @RequestParam String email,
-                       Model model) {
-        model.addAttribute("userId", userId);
-        model.addAttribute("email", email);
-        return "notification-success";
+        response.sendRedirect("http://localhost:5173/");
     }
 
     @GetMapping("/checkEmail")
-    @ResponseBody
-    public String checkEmailWhenLogin(@RequestParam String email) {
-        return this.userService.checkEmailWhenLogin(email);
-    }
+    public ResponseEntity<?> checkEmail(@RequestParam String email) {
+        String result = userService.checkEmailWhenLogin(email);
 
-    @GetMapping("/getName")
-    @ResponseBody
-    public String getName(Jwt jwt) {
-        return jwt.getClaim("name");
+        return ResponseEntity.ok(Map.of(
+                "type", result
+        ));
     }
-
 
 }

@@ -21,8 +21,8 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
-import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -36,7 +36,6 @@ public class UserServiceImpl implements IUserService {
     private final TokenCacheService tokenCacheService;
     private final ClientUuidCacheService clientUuidCacheService;
     private final RoleCacheService roleCacheService;
-    private final RedisTemplate<String, String> redisTemplate;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final PasswordEncoder passwordEncoder;
 
@@ -49,13 +48,12 @@ public class UserServiceImpl implements IUserService {
     @NonFinal
     private String clientSecret;
 
-    public UserServiceImpl(IUserRepository userRepository, IdentityClient identityClient, TokenCacheService tokenCacheService, ClientUuidCacheService clientUuidCacheService, RoleCacheService roleCacheService, RedisTemplate<String, String> redisTemplate, KafkaTemplate<String, Object> kafkaTemplate, PasswordEncoder passwordEncoder) {
+    public UserServiceImpl(IUserRepository userRepository, IdentityClient identityClient, TokenCacheService tokenCacheService, ClientUuidCacheService clientUuidCacheService, RoleCacheService roleCacheService, KafkaTemplate<String, Object> kafkaTemplate, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.identityClient = identityClient;
         this.tokenCacheService = tokenCacheService;
         this.clientUuidCacheService = clientUuidCacheService;
         this.roleCacheService = roleCacheService;
-        this.redisTemplate = redisTemplate;
         this.kafkaTemplate = kafkaTemplate;
         this.passwordEncoder = passwordEncoder;
     }
@@ -80,8 +78,8 @@ public class UserServiceImpl implements IUserService {
         user.setActive(false);
         user.setCodeActive(activeCode);
         user.setCodeActiveExpiredAt(generateExpiredTime(1));
-        user.setDateCreated(new Date());
-        user.setDateModified(new Date());
+        user.setDateCreated(LocalDateTime.now());
+        user.setDateModified(LocalDateTime.now());
         User savedUser = userRepository.save(user);
         MessageResponseUser message = new MessageResponseUser();
         message.setToUserEmail(savedUser.getEmail());
@@ -197,7 +195,7 @@ public class UserServiceImpl implements IUserService {
             var token = tokenCacheService.getClientToken();
             sendResetPassword(user.getUserId(), "thuThuy@1", token);
             user.setPassword(passwordEncoder.encode(request.getPassword()));
-            user.setDateModified(new Date());
+            user.setDateModified(LocalDateTime.now());
             this.userRepository.save(user);
         }
         return "SUCCESS";
@@ -273,7 +271,7 @@ public class UserServiceImpl implements IUserService {
             return "INVALID";
         }
         if (user.getCodeActiveExpiredAt() == null
-                || user.getCodeActiveExpiredAt().before(new Date())) {
+                || user.getCodeActiveExpiredAt().isBefore(LocalDateTime.now())) {
             return "EXPIRED";
         }
         var token = tokenCacheService.getClientToken();
@@ -311,19 +309,27 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     public String resendActiveCode(long userId) {
+
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User không tồn tại"));
+                .orElseThrow(() -> new RuntimeException("USER_NOT_FOUND"));
 
         if (user.isActive()) {
-            return "Tài khoản đã kích hoạt, không cần gửi lại mã!";
+            throw new RuntimeException("ALREADY_ACTIVE");
         }
 
+        if (user.getCodeActiveExpiredAt() != null &&
+                user.getCodeActiveExpiredAt().isAfter(LocalDateTime.now())) {
+            throw new RuntimeException("WAIT_EXPIRED");
+        }
+
+        // 🔥 tạo code mới
         String newCode = createActiveCode();
 
         user.setCodeActive(newCode);
-        user.setCodeActiveExpiredAt(generateExpiredTime(15));
+        user.setCodeActiveExpiredAt(generateExpiredTime(1)); // 1 phút
         userRepository.save(user);
 
+        // gửi mail
         MessageResponseUser message = new MessageResponseUser();
         message.setToUserEmail(user.getEmail());
         message.setToUserFullName(user.getFirstName() + " " + user.getLastName());
@@ -332,9 +338,7 @@ public class UserServiceImpl implements IUserService {
 
         kafkaTemplate.send("send-email-active-response", message);
 
-        log.info("Resend active code cho userId: {}", user.getId());
-
-        return "Đã gửi lại mã kích hoạt!";
+        return "SUCCESS";
     }
 
     @Override
@@ -407,8 +411,8 @@ public class UserServiceImpl implements IUserService {
         user.setActive(true);
         user.setProvider("GOOGLE");
 
-        user.setDateCreated(new Date());
-        user.setDateModified(new Date());
+        user.setDateCreated(LocalDateTime.now());
+        user.setDateModified(LocalDateTime.now());
 
         user.setRoleName("USER");
         assignDefaultRole(keycloakUserId, "USER");
@@ -427,19 +431,19 @@ public class UserServiceImpl implements IUserService {
         );
     }
 
-    private Date formatDateFromStringToDate(String date) {
-        LocalDate localDate = LocalDate.parse(date);
-        Instant instant = localDate.atStartOfDay(ZoneId.systemDefault()).toInstant();
-        return Date.from(instant);
+    private LocalDateTime formatDateFromStringToDate(String date) {
+        return LocalDate.parse(date)
+                .atStartOfDay();
     }
 
-    public static String toIsoDateStringVn(Date date) {
-        if (date == null) {
+    public static String toIsoDateStringVn(LocalDateTime dateTime) {
+        if (dateTime == null) {
             return null;
         }
-        Instant instant = date.toInstant();
-        LocalDate localDate = instant.atZone(VN_ZONE).toLocalDate();
-        return localDate.format(FORMATTER);
+        return dateTime
+                .atZone(VN_ZONE)
+                .toLocalDate()
+                .format(FORMATTER);
     }
 
     @Override
@@ -494,10 +498,8 @@ public class UserServiceImpl implements IUserService {
         return UUID.randomUUID().toString();
     }
 
-    private Date generateExpiredTime(int minutes) {
-        return Date.from(
-                Instant.now().plusSeconds(minutes * 60L)
-        );
+    private LocalDateTime generateExpiredTime(int minutes) {
+        return LocalDateTime.now().plusMinutes(minutes);
     }
 }
 
