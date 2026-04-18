@@ -349,10 +349,27 @@ public class UserServiceImpl implements IUserService {
             String payload = new String(Base64.getDecoder().decode(parts[1]));
 
             ObjectMapper mapper = new ObjectMapper();
-            Map map = mapper.readValue(payload, Map.class);
+            Map<String, Object> map = mapper.readValue(payload, Map.class);
             UserDTO newUserDto = new UserDTO();
             newUserDto.setEmail((String) map.get("email"));
             newUserDto.setFullName((String) map.get("name"));
+            // 🔥 LẤY ROLE (realm_access)
+            Map<String, Object> realmAccess = (Map<String, Object>) map.get("realm_access");
+
+            if (realmAccess != null) {
+                var roles = (List<String>) realmAccess.get("roles");
+
+                List<String> priority = List.of("ADMIN", "STAFF", "USER");
+
+                if (roles != null) {
+                    for (String p : priority) {
+                        if (roles.contains(p)) {
+                            newUserDto.setRoleName(p);
+                            break;
+                        }
+                    }
+                }
+            }
             return newUserDto;
         } catch (Exception e) {
             return null;

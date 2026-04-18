@@ -99,7 +99,8 @@ public class AuthController {
                 return ResponseEntity.ok(
                         Map.of(
                                 "isLoggedIn", true,
-                                "name", userDTO.getFullName()
+                                "name", userDTO.getFullName(),
+                                "role", userDTO.getRoleName()
                         )
                 );
             } catch (Exception e) {
