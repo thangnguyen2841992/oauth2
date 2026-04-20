@@ -74,4 +74,9 @@ public interface IdentityClient {
             @PathVariable String userId,
             @RequestBody List<GetRoleIdResponse> roles
     );
+
+    @PostMapping(value = "/realms/${spring.idp.realm}/protocol/openid-connect/token",
+            consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE
+    )
+    TokenUserResponse refresh(@QueryMap() RefreshTokenParam param);
 }

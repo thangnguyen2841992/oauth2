@@ -31,9 +31,10 @@ public class User {
     private String address;
     private LocalDateTime dateCreated;
     private LocalDateTime dateModified;
+    private LocalDateTime lastLogin;
     private String roleName;
     private boolean isActive;
     private String codeActive;
     private LocalDateTime codeActiveExpiredAt;
-    private String provider; // LOCAL, GOOGLE
+    private String provider;
 }

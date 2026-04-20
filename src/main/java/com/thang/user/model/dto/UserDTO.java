@@ -22,4 +22,6 @@ public class UserDTO {
     private String roleName;
     private String dateCreated;
     private String dateModified;
+    private String lastLogin;
+    private String activeStatus;
 }

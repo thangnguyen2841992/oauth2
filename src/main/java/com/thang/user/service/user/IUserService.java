@@ -40,9 +40,17 @@ public interface IUserService {
 
 
     TokenUserResponse exchangeCodeToToken(String code);
+
     TokenUserResponse handleOAuth2Login(String code);
-     void sendResetPassword(String userId, String password,String token);
-     String updatePassword(CreateUserRequest request);
-     String checkEmailWhenLogin(String email);
+
+    void sendResetPassword(String userId, String password, String token);
+
+    String updatePassword(CreateUserRequest request);
+
+    String checkEmailWhenLogin(String email);
+
     void logout(String refreshToken);
+
+    TokenUserResponse refresh(String refreshToken);
+
 }

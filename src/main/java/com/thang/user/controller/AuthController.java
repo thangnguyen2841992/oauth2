@@ -37,7 +37,7 @@ public class AuthController {
             ResponseCookie accessToken = ResponseCookie.from("accessToken", res.getAccess_token())
                     .httpOnly(true)
                     .path("/")
-                    .maxAge(60 * 60)
+                    .maxAge(5 * 60)
                     .sameSite("Lax")
                     .secure(false)
                     .build();
@@ -45,7 +45,7 @@ public class AuthController {
             ResponseCookie refreshToken = ResponseCookie.from("refreshToken", res.getRefresh_token())
                     .httpOnly(true)
                     .path("/")
-                    .maxAge(60 * 60)
+                    .maxAge(7 * 24 * 60 * 60)
                     .sameSite("Lax")
                     .secure(false)
                     .build();
@@ -114,22 +114,25 @@ public class AuthController {
         );
     }
 
-    @GetMapping("/logout")
-    public ResponseEntity<?> logout(HttpServletRequest request,
-                                    HttpServletResponse response) {
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout() {
 
-        String refreshToken = CookieUtils.get(request, "refreshToken");
+        ResponseCookie accessToken = ResponseCookie.from("accessToken", "")
+                .httpOnly(true)
+                .path("/")
+                .maxAge(0)
+                .build();
 
-        if (refreshToken != null) {
-            userService.logout(refreshToken);
-        }
+        ResponseCookie refreshToken = ResponseCookie.from("refreshToken", "")
+                .httpOnly(true)
+                .path("/")
+                .maxAge(0)
+                .build();
 
-        CookieUtils.clear(response, "accessToken");
-        CookieUtils.clear(response, "refreshToken");
-
-        return ResponseEntity.ok(Map.of(
-                "message", "Logout success"
-        ));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, accessToken.toString())
+                .header(HttpHeaders.SET_COOKIE, refreshToken.toString())
+                .body(Map.of("message", "logged out"));
     }
 
     @GetMapping("/callbackGoogle")
@@ -144,7 +147,7 @@ public class AuthController {
         cookie.setHttpOnly(true);
         cookie.setSecure(false);
         cookie.setPath("/");
-        cookie.setMaxAge(3600);
+        cookie.setMaxAge(300);
 
         response.addCookie(cookie);
 
@@ -160,4 +163,39 @@ public class AuthController {
         ));
     }
 
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refresh(@CookieValue(value = "refreshToken", required = false) String refreshToken) {
+
+        if (refreshToken == null) {
+            return ResponseEntity.status(401).body(Map.of("message", "No refresh token"));
+        }
+
+        try {
+            TokenUserResponse res = userService.refresh(refreshToken);
+
+            ResponseCookie accessToken = ResponseCookie.from("accessToken", res.getAccess_token())
+                    .httpOnly(true)
+                    .path("/")
+                    .maxAge(5 * 60)
+                    .sameSite("Lax")
+                    .secure(false)
+                    .build();
+
+            ResponseCookie newRefreshToken = ResponseCookie.from("refreshToken", res.getRefresh_token())
+                    .httpOnly(true)
+                    .path("/")
+                    .maxAge(7 * 24 * 60 * 60)
+                    .sameSite("Lax")
+                    .secure(false)
+                    .build();
+
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.SET_COOKIE, accessToken.toString())
+                    .header(HttpHeaders.SET_COOKIE, newRefreshToken.toString())
+                    .body(Map.of("message", "refreshed"));
+
+        } catch (Exception e) {
+            return ResponseEntity.status(401).body(Map.of("message", "Refresh token expired"));
+        }
+    }
 }

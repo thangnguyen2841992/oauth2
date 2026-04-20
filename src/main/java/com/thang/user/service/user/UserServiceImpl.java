@@ -135,20 +135,26 @@ public class UserServiceImpl implements IUserService {
         User user = userRepository.findByEmail(loginRequest.getEmail())
                 .orElseThrow(() -> new RuntimeException("Tài khoản hoặc mật khẩu không đúng"));
 
-        if (!passwordEncoder.matches(loginRequest.getPassword(), user.getPassword())) {
-            throw new RuntimeException("Tài khoản hoặc mật khẩu không đúng");
+        if (!user.isActive()) {
+            throw new RuntimeException("Tài khoản chưa kích hoạt");
         }
 
-        return identityClient.login(LoginUsingKeyCloakParam.builder()
-                .grant_type("password")
-                .client_secret(clientSecret)
-                .client_id(clientId)
-                .scope("openid")
-                .username(loginRequest.getEmail())
-                .password(loginRequest.getPassword())
-                .build());
-    }
+        TokenUserResponse token = identityClient.login(
+                LoginUsingKeyCloakParam.builder()
+                        .grant_type("password")
+                        .client_secret(clientSecret)
+                        .client_id(clientId)
+                        .scope("openid")
+                        .username(loginRequest.getEmail())
+                        .password(loginRequest.getPassword())
+                        .build()
+        );
 
+        user.setLastLogin(LocalDateTime.now());
+        userRepository.save(user);
+
+        return token;
+    }
     @Override
     public TokenUserResponse handleOAuth2Login(String code) {
 
@@ -353,7 +359,6 @@ public class UserServiceImpl implements IUserService {
             UserDTO newUserDto = new UserDTO();
             newUserDto.setEmail((String) map.get("email"));
             newUserDto.setFullName((String) map.get("name"));
-            // 🔥 LẤY ROLE (realm_access)
             Map<String, Object> realmAccess = (Map<String, Object>) map.get("realm_access");
 
             if (realmAccess != null) {
@@ -397,6 +402,16 @@ public class UserServiceImpl implements IUserService {
                 request,
                 String.class
         );
+    }
+
+    @Override
+    public TokenUserResponse refresh(String refreshToken) {
+        RefreshTokenParam param = new RefreshTokenParam();
+        param.setClient_id("japanese_app");
+        param.setClient_secret(clientSecret); // nếu có
+        param.setRefresh_token(refreshToken);
+
+        return identityClient.refresh(param);
     }
 
     @Override
@@ -499,6 +514,7 @@ public class UserServiceImpl implements IUserService {
         UserDTO dto = new UserDTO();
         dto.setFirstName(user.getFirstName());
         dto.setLastName(user.getLastName());
+        dto.setFullName(user.getFirstName() + " " + user.getLastName());
         dto.setPhoneNumber(user.getPhoneNumber());
         dto.setAddress(user.getAddress());
         dto.setEmail(user.getEmail());
@@ -507,7 +523,13 @@ public class UserServiceImpl implements IUserService {
         dto.setDateModified(toIsoDateStringVn(user.getDateModified()));
         dto.setUserId(user.getUserId());
         dto.setDateOfBirth(toIsoDateStringVn(user.getDateOfBirth()));
+        dto.setLastLogin(toIsoDateStringVn(user.getLastLogin()));
         dto.setRoleName(user.getRoleName());
+        if (user.isActive()) {
+            dto.setActiveStatus("Đã kích hoạt");
+        } else {
+            dto.setActiveStatus("Chưa kích hoạt");
+        }
         return dto;
     }
 

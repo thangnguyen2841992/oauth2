@@ -28,4 +28,10 @@ public class UserRestController {
     public ResponseEntity<?> getAllUsersKeyCloak() {
         return new ResponseEntity<>(userService.getAllUsersKeyCloak(), HttpStatus.OK);
     }
+
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
+    @GetMapping("/getAllUsers")
+    public ResponseEntity<?> getAllUsers() {
+        return new ResponseEntity<>(userService.getAllUsers(), HttpStatus.OK);
+    }
 }
