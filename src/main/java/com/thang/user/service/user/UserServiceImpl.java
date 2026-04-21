@@ -80,6 +80,7 @@ public class UserServiceImpl implements IUserService {
         user.setCodeActiveExpiredAt(generateExpiredTime(1));
         user.setDateCreated(LocalDateTime.now());
         user.setDateModified(LocalDateTime.now());
+        user.setRoleName(dto.getRoleName());
         User savedUser = userRepository.save(user);
         MessageResponseUser message = new MessageResponseUser();
         message.setToUserEmail(savedUser.getEmail());
@@ -297,7 +298,7 @@ public class UserServiceImpl implements IUserService {
 
             String keycloakUserId = extractUserId(response);
 
-            assignDefaultRole(keycloakUserId, "USER");
+            assignDefaultRole(keycloakUserId, user.getRoleName());
 
             user.setActive(true);
             user.setUserId(keycloakUserId);
