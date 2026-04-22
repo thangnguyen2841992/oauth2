@@ -52,5 +52,9 @@ public interface IUserService {
     void logout(String refreshToken);
 
     TokenUserResponse refresh(String refreshToken);
+    void logoutAllSessions(String email);
+    String extractSessionId(String accessToken);
+    void forceLogoutUser(String userId);
+
 
 }

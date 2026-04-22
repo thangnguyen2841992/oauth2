@@ -1,6 +1,7 @@
 package com.thang.user.service.user;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nimbusds.jwt.SignedJWT;
 import com.thang.user.model.dto.CreateUserRequest;
 import com.thang.user.model.dto.LoginRequest;
 import com.thang.user.model.dto.MessageResponseUser;
@@ -11,10 +12,12 @@ import com.thang.user.repository.IUserRepository;
 import com.thang.user.repository.IdentityClient;
 import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.*;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
@@ -38,6 +41,7 @@ public class UserServiceImpl implements IUserService {
     private final RoleCacheService roleCacheService;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final PasswordEncoder passwordEncoder;
+    private final SimpMessagingTemplate messagingTemplate;
 
 
     @Value("${spring.idp.client-id}")
@@ -48,7 +52,7 @@ public class UserServiceImpl implements IUserService {
     @NonFinal
     private String clientSecret;
 
-    public UserServiceImpl(IUserRepository userRepository, IdentityClient identityClient, TokenCacheService tokenCacheService, ClientUuidCacheService clientUuidCacheService, RoleCacheService roleCacheService, KafkaTemplate<String, Object> kafkaTemplate, PasswordEncoder passwordEncoder) {
+    public UserServiceImpl(IUserRepository userRepository, IdentityClient identityClient, TokenCacheService tokenCacheService, ClientUuidCacheService clientUuidCacheService, RoleCacheService roleCacheService, KafkaTemplate<String, Object> kafkaTemplate, PasswordEncoder passwordEncoder, SimpMessagingTemplate messagingTemplate) {
         this.userRepository = userRepository;
         this.identityClient = identityClient;
         this.tokenCacheService = tokenCacheService;
@@ -56,6 +60,7 @@ public class UserServiceImpl implements IUserService {
         this.roleCacheService = roleCacheService;
         this.kafkaTemplate = kafkaTemplate;
         this.passwordEncoder = passwordEncoder;
+        this.messagingTemplate = messagingTemplate;
     }
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
@@ -139,6 +144,7 @@ public class UserServiceImpl implements IUserService {
         if (!user.isActive()) {
             throw new RuntimeException("Tài khoản chưa kích hoạt");
         }
+        logoutAllSessions(loginRequest.getEmail());
 
         TokenUserResponse token = identityClient.login(
                 LoginUsingKeyCloakParam.builder()
@@ -154,14 +160,27 @@ public class UserServiceImpl implements IUserService {
         user.setLastLogin(LocalDateTime.now());
         userRepository.save(user);
 
+        String userId = user.getUserId();
+        // 👉 logout session cũ
+        forceLogoutUser(userId);
         return token;
     }
+
     @Override
     public TokenUserResponse handleOAuth2Login(String code) {
 
         TokenUserResponse token = this.exchangeCodeToToken(code);
         String accessToken = token.getAccess_token();
         String email = extractClaim(accessToken, "email");
+
+        // 🔥 Delay nhẹ để đảm bảo session cũ vẫn tồn tại
+        try {
+            Thread.sleep(200);
+        } catch (Exception ignored) {
+        }
+
+        // 🔥 XÓA SESSION CŨ (không cần match)
+        logoutAllSessions(email);
         String name = extractClaim(accessToken, "name");
         String sub = extractClaim(accessToken, "sub");
 
@@ -416,6 +435,39 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
+    public void logoutAllSessions(String email) {
+
+        String token = tokenCacheService.getClientToken();
+
+        List<UserKeyCloakResponse> users =
+                identityClient.findUserByEmail("Bearer " + token, email);
+
+        if (users == null || users.isEmpty()) {
+            throw new RuntimeException("User không tồn tại");
+        }
+
+        String userId = users.get(0).getId();
+
+        List<KeycloakSessionResponse> sessions =
+                identityClient.getUserSessions("Bearer " + token, userId);
+
+        for (KeycloakSessionResponse session : sessions) {
+            log.info("Deleting session: {}", session.getId());
+            identityClient.deleteSession("Bearer " + token, session.getId());
+        }
+    }
+
+    @Override
+    public String extractSessionId(String accessToken) {
+        try {
+            SignedJWT jwt = SignedJWT.parse(accessToken);
+            return jwt.getJWTClaimsSet().getStringClaim("session_state");
+        } catch (Exception e) {
+            throw new RuntimeException("Không parse được token");
+        }
+    }
+
+    @Override
     public void createUserFromGoogle(String email,
                                      String firstName,
                                      String lastName,
@@ -540,6 +592,15 @@ public class UserServiceImpl implements IUserService {
 
     private LocalDateTime generateExpiredTime(int minutes) {
         return LocalDateTime.now().plusMinutes(minutes);
+    }
+
+    @Override
+    public void forceLogoutUser(String userId) {
+        messagingTemplate.convertAndSendToUser(
+                userId,
+                "/queue/logout",
+                "force_logout"
+        );
     }
 }
 
