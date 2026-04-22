@@ -596,10 +596,13 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     public void forceLogoutUser(String userId) {
+        Map<String, String> payload = new HashMap<>();
+        payload.put("type", "FORCE_LOGOUT");
+
         messagingTemplate.convertAndSendToUser(
                 userId,
                 "/queue/logout",
-                "force_logout"
+                payload
         );
     }
 }
