@@ -79,4 +79,16 @@ public interface IdentityClient {
             consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE
     )
     TokenUserResponse refresh(@QueryMap() RefreshTokenParam param);
+
+    @GetMapping("/admin/realms/${spring.idp.realm}/users/{userId}/sessions")
+    List<KeycloakSessionResponse> getUserSessions(
+            @RequestHeader("authorization") String token,
+            @PathVariable String userId
+    );
+
+    @DeleteMapping("/admin/realms/${spring.idp.realm}/sessions/{sessionId}")
+    void deleteSession(
+            @RequestHeader("authorization") String token,
+            @PathVariable String sessionId
+    );
 }

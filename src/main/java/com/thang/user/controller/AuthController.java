@@ -6,14 +6,12 @@ import com.thang.user.model.dto.UserDTO;
 import com.thang.user.model.dto.identity.TokenUserResponse;
 import com.thang.user.model.entity.User;
 import com.thang.user.service.user.IUserService;
-import com.thang.user.utils.CookieUtils;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
