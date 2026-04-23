@@ -55,6 +55,6 @@ public interface IUserService {
     void logoutAllSessions(String email);
     String extractSessionId(String accessToken);
     void forceLogoutUser(String userId);
-
+    void logoutOldSessionsKeepLatest(String email);
 
 }

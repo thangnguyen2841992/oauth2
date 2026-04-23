@@ -2,6 +2,7 @@ package com.thang.user.controller;
 
 import com.thang.user.model.dto.CreateUserRequest;
 import com.thang.user.model.dto.LoginRequest;
+import com.thang.user.model.dto.LogoutRequest;
 import com.thang.user.model.dto.UserDTO;
 import com.thang.user.model.dto.identity.TokenUserResponse;
 import com.thang.user.model.entity.User;
@@ -98,6 +99,7 @@ public class AuthController {
                         Map.of(
                                 "isLoggedIn", true,
                                 "name", userDTO.getFullName(),
+                                "email", userDTO.getEmail(),
                                 "role", userDTO.getRoleName()
                         )
                 );
@@ -113,7 +115,7 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<?> logout() {
+    public ResponseEntity<?> logout(@RequestBody LogoutRequest logoutRequest) {
 
         ResponseCookie accessToken = ResponseCookie.from("accessToken", "")
                 .httpOnly(true)
@@ -126,6 +128,7 @@ public class AuthController {
                 .path("/")
                 .maxAge(0)
                 .build();
+        this.userService.logoutAllSessions(logoutRequest.getEmail());
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, accessToken.toString())

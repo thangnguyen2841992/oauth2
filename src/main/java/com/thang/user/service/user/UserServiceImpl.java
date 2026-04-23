@@ -172,20 +172,13 @@ public class UserServiceImpl implements IUserService {
         TokenUserResponse token = this.exchangeCodeToToken(code);
         String accessToken = token.getAccess_token();
         String email = extractClaim(accessToken, "email");
-
-        // 🔥 Delay nhẹ để đảm bảo session cũ vẫn tồn tại
-        try {
-            Thread.sleep(200);
-        } catch (Exception ignored) {
-        }
-
-        // 🔥 XÓA SESSION CŨ (không cần match)
-        logoutAllSessions(email);
+        logoutOldSessionsKeepLatest(email);
         String name = extractClaim(accessToken, "name");
         String sub = extractClaim(accessToken, "sub");
 
         String lastName = "";
         createUserFromGoogle(email, name, lastName, sub);
+        forceLogoutUser(sub);
         return token;
     }
 
@@ -456,6 +449,51 @@ public class UserServiceImpl implements IUserService {
             identityClient.deleteSession("Bearer " + token, session.getId());
         }
     }
+
+    @Override
+    public void logoutOldSessionsKeepLatest(String email) {
+
+        String token = tokenCacheService.getClientToken();
+
+        List<UserKeyCloakResponse> users =
+                identityClient.findUserByEmail("Bearer " + token, email);
+
+        if (users == null || users.isEmpty()) {
+            throw new RuntimeException("User không tồn tại");
+        }
+
+        String userId = users.get(0).getId();
+
+        List<KeycloakSessionResponse> sessions =
+                identityClient.getUserSessions("Bearer " + token, userId);
+
+        if (sessions == null || sessions.size() <= 1) {
+            return; // không cần xoá
+        }
+
+        // 🔥 sort theo lastAccess (mới nhất lên đầu)
+        sessions.sort((s1, s2) ->
+                Long.compare(s2.getLastAccess(), s1.getLastAccess())
+        );
+
+        // 🔥 giữ session đầu tiên (mới nhất)
+        KeycloakSessionResponse latestSession = sessions.get(0);
+
+        log.info("Keeping latest session: {}", latestSession.getId());
+
+        // 🔥 xoá các session còn lại
+        for (int i = 1; i < sessions.size(); i++) {
+            KeycloakSessionResponse session = sessions.get(i);
+
+            log.info("Deleting old session: {}", session.getId());
+
+            identityClient.deleteSession(
+                    "Bearer " + token,
+                    session.getId()
+            );
+        }
+    }
+
 
     @Override
     public String extractSessionId(String accessToken) {

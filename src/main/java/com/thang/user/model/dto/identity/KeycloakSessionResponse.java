@@ -14,4 +14,5 @@ public class KeycloakSessionResponse {
     private String username;
     private String ipAddress;
     private long start;
+    private Long lastAccess;
 }
