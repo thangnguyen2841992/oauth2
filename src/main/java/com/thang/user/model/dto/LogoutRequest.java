@@ -11,4 +11,6 @@ import lombok.Setter;
 @Setter
 public class LogoutRequest {
     private String email;
+
+    private String sessionId;
 }

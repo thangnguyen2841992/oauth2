@@ -15,6 +15,8 @@ public interface IUserService {
 
     List<UserDTO> getAllUsers();
 
+    User findUserByEmail(String email);
+
     UserDTO getUserById(Long id);
 
     UserDTO updateUser(Long id, UserDTO dto);
@@ -41,7 +43,7 @@ public interface IUserService {
 
     TokenUserResponse exchangeCodeToToken(String code);
 
-    TokenUserResponse handleOAuth2Login(String code);
+    TokenUserResponse handleOAuth2Login(String code, String sessionId);
 
     void sendResetPassword(String userId, String password, String token);
 
@@ -54,7 +56,7 @@ public interface IUserService {
     TokenUserResponse refresh(String refreshToken);
     void logoutAllSessions(String email);
     String extractSessionId(String accessToken);
-    void forceLogoutUser(String userId);
+    void forceLogoutUser(String userId, String sessionId);
     void logoutOldSessionsKeepLatest(String email);
 
 }

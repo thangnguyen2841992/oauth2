@@ -42,6 +42,7 @@ public class UserServiceImpl implements IUserService {
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final PasswordEncoder passwordEncoder;
     private final SimpMessagingTemplate messagingTemplate;
+    private final SessionService sessionService;
 
 
     @Value("${spring.idp.client-id}")
@@ -52,7 +53,7 @@ public class UserServiceImpl implements IUserService {
     @NonFinal
     private String clientSecret;
 
-    public UserServiceImpl(IUserRepository userRepository, IdentityClient identityClient, TokenCacheService tokenCacheService, ClientUuidCacheService clientUuidCacheService, RoleCacheService roleCacheService, KafkaTemplate<String, Object> kafkaTemplate, PasswordEncoder passwordEncoder, SimpMessagingTemplate messagingTemplate) {
+    public UserServiceImpl(IUserRepository userRepository, IdentityClient identityClient, TokenCacheService tokenCacheService, ClientUuidCacheService clientUuidCacheService, RoleCacheService roleCacheService, KafkaTemplate<String, Object> kafkaTemplate, PasswordEncoder passwordEncoder, SimpMessagingTemplate messagingTemplate, SessionService sessionService) {
         this.userRepository = userRepository;
         this.identityClient = identityClient;
         this.tokenCacheService = tokenCacheService;
@@ -61,6 +62,7 @@ public class UserServiceImpl implements IUserService {
         this.kafkaTemplate = kafkaTemplate;
         this.passwordEncoder = passwordEncoder;
         this.messagingTemplate = messagingTemplate;
+        this.sessionService = sessionService;
     }
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
@@ -111,6 +113,13 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
+    public User findUserByEmail(String email) {
+        return userRepository
+                .findByEmail(email)
+                .orElse(null);
+    }
+
+    @Override
     public UserDTO getUserById(Long id) {
         Optional<User> user = this.userRepository.findById(id);
         UserDTO dto = new UserDTO();
@@ -138,47 +147,67 @@ public class UserServiceImpl implements IUserService {
     @Override
     public TokenUserResponse login(LoginRequest loginRequest) {
 
-        User user = userRepository.findByEmail(loginRequest.getEmail())
-                .orElseThrow(() -> new RuntimeException("Tài khoản hoặc mật khẩu không đúng"));
+        User user = userRepository.findByEmail(loginRequest.getEmail()).orElseThrow(() -> new RuntimeException("Tài khoản hoặc mật khẩu không đúng"));
 
         if (!user.isActive()) {
             throw new RuntimeException("Tài khoản chưa kích hoạt");
         }
         logoutAllSessions(loginRequest.getEmail());
 
-        TokenUserResponse token = identityClient.login(
-                LoginUsingKeyCloakParam.builder()
-                        .grant_type("password")
-                        .client_secret(clientSecret)
-                        .client_id(clientId)
-                        .scope("openid")
-                        .username(loginRequest.getEmail())
-                        .password(loginRequest.getPassword())
-                        .build()
-        );
+        // ✅ session mới từ frontend
+        String newSessionId = loginRequest.getSessionId();
+
+        if (newSessionId == null || newSessionId.isBlank()) {
+
+            throw new RuntimeException("SessionId is required");
+        }
+
+        // ✅ lấy session cũ trong Redis
+        String oldSessionId = sessionService.getSession(user.getUserId());
+
+        TokenUserResponse token = identityClient.login(LoginUsingKeyCloakParam.builder().grant_type("password").client_secret(clientSecret).client_id(clientId).scope("openid").username(loginRequest.getEmail()).password(loginRequest.getPassword()).build());
+        // ✅ login thành công mới logout tab cũ
+        if (oldSessionId != null && !oldSessionId.equals(newSessionId)) {
+
+            forceLogoutUser(user.getUserId(), oldSessionId);
+        }
+
+        // ✅ save session mới vào Redis
+        sessionService.saveSession(user.getUserId(), newSessionId);
 
         user.setLastLogin(LocalDateTime.now());
         userRepository.save(user);
 
-        String userId = user.getUserId();
-        // 👉 logout session cũ
-        forceLogoutUser(userId);
+
         return token;
     }
 
     @Override
-    public TokenUserResponse handleOAuth2Login(String code) {
+    public TokenUserResponse handleOAuth2Login(String code, String newSessionId) {
 
         TokenUserResponse token = this.exchangeCodeToToken(code);
+
         String accessToken = token.getAccess_token();
+
         String email = extractClaim(accessToken, "email");
-        logoutOldSessionsKeepLatest(email);
+
         String name = extractClaim(accessToken, "name");
+
         String sub = extractClaim(accessToken, "sub");
 
-        String lastName = "";
-        createUserFromGoogle(email, name, lastName, sub);
-        forceLogoutUser(sub);
+        // ✅ session cũ
+        String oldSessionId = sessionService.getSession(sub);
+
+        // ✅ force logout tab cũ
+        if (oldSessionId != null && !oldSessionId.equals(newSessionId)) {
+            forceLogoutUser(sub, oldSessionId);
+        }
+
+        // ✅ save session mới
+        sessionService.saveSession(sub, newSessionId);
+
+        createUserFromGoogle(email, name, "", sub);
+
         return token;
     }
 
@@ -225,20 +254,15 @@ public class UserServiceImpl implements IUserService {
 
         String token = tokenCacheService.getClientToken();
 
-        return identityClient.findUserByEmail("Bearer " + token, email)
-                .stream()
-                .findFirst()
-                .map(user -> {
-                    List<UserKeyCloakResponse> identities =
-                            identityClient.federatedIdentity("Bearer " + token, user.getId());
+        return identityClient.findUserByEmail("Bearer " + token, email).stream().findFirst().map(user -> {
+            List<UserKeyCloakResponse> identities = identityClient.federatedIdentity("Bearer " + token, user.getId());
 
-                    if (identities == null || identities.isEmpty()) {
-                        return "LOCAL";
-                    }
+            if (identities == null || identities.isEmpty()) {
+                return "LOCAL";
+            }
 
-                    return identities.get(0).getIdentityProvider().toUpperCase();
-                })
-                .orElse("NOT_FOUND");
+            return identities.get(0).getIdentityProvider().toUpperCase();
+        }).orElse("NOT_FOUND");
     }
 
     public static boolean isValidPassword(String password) {
@@ -289,24 +313,13 @@ public class UserServiceImpl implements IUserService {
         if (!activeCode.equals(user.getCodeActive())) {
             return "INVALID";
         }
-        if (user.getCodeActiveExpiredAt() == null
-                || user.getCodeActiveExpiredAt().isBefore(LocalDateTime.now())) {
+        if (user.getCodeActiveExpiredAt() == null || user.getCodeActiveExpiredAt().isBefore(LocalDateTime.now())) {
             return "EXPIRED";
         }
         var token = tokenCacheService.getClientToken();
 
         try {
-            var response = identityClient.createNewUser(
-                    UserCreationParam.builder()
-                            .username(user.getEmail())
-                            .firstName(user.getFirstName())
-                            .lastName(user.getLastName())
-                            .email(user.getEmail())
-                            .enabled(true)
-                            .emailVerified(true)
-                            .build(),
-                    "Bearer " + token
-            );
+            var response = identityClient.createNewUser(UserCreationParam.builder().username(user.getEmail()).firstName(user.getFirstName()).lastName(user.getLastName()).email(user.getEmail()).enabled(true).emailVerified(true).build(), "Bearer " + token);
 
             String keycloakUserId = extractUserId(response);
 
@@ -329,15 +342,13 @@ public class UserServiceImpl implements IUserService {
     @Override
     public String resendActiveCode(long userId) {
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("USER_NOT_FOUND"));
+        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("USER_NOT_FOUND"));
 
         if (user.isActive()) {
             throw new RuntimeException("ALREADY_ACTIVE");
         }
 
-        if (user.getCodeActiveExpiredAt() != null &&
-                user.getCodeActiveExpiredAt().isAfter(LocalDateTime.now())) {
+        if (user.getCodeActiveExpiredAt() != null && user.getCodeActiveExpiredAt().isAfter(LocalDateTime.now())) {
             throw new RuntimeException("WAIT_EXPIRED");
         }
 
@@ -448,14 +459,9 @@ public class UserServiceImpl implements IUserService {
         body.add("client_secret", clientSecret);
         body.add("refresh_token", refreshToken);
 
-        HttpEntity<MultiValueMap<String, String>> request =
-                new HttpEntity<>(body, headers);
+        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
 
-        rest.postForEntity(
-                "http://localhost:8180/realms/nihongo/protocol/openid-connect/logout",
-                request,
-                String.class
-        );
+        rest.postForEntity("http://localhost:8180/realms/nihongo/protocol/openid-connect/logout", request, String.class);
     }
 
     @Override
@@ -473,8 +479,7 @@ public class UserServiceImpl implements IUserService {
 
         String token = tokenCacheService.getClientToken();
 
-        List<UserKeyCloakResponse> users =
-                identityClient.findUserByEmail("Bearer " + token, email);
+        List<UserKeyCloakResponse> users = identityClient.findUserByEmail("Bearer " + token, email);
 
         if (users == null || users.isEmpty()) {
             throw new RuntimeException("User không tồn tại");
@@ -482,8 +487,7 @@ public class UserServiceImpl implements IUserService {
 
         String userId = users.get(0).getId();
 
-        List<KeycloakSessionResponse> sessions =
-                identityClient.getUserSessions("Bearer " + token, userId);
+        List<KeycloakSessionResponse> sessions = identityClient.getUserSessions("Bearer " + token, userId);
 
         for (KeycloakSessionResponse session : sessions) {
             log.info("Deleting session: {}", session.getId());
@@ -492,46 +496,94 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
-    public void logoutOldSessionsKeepLatest(String email) {
+    public void logoutOldSessionsKeepLatest(
+            String email
+    ) {
 
-        String token = tokenCacheService.getClientToken();
+        // ✅ lấy admin token
+        String token =
+                tokenCacheService.getClientToken();
 
+        // ✅ tìm user Keycloak theo email
         List<UserKeyCloakResponse> users =
-                identityClient.findUserByEmail("Bearer " + token, email);
+                identityClient.findUserByEmail(
+                        "Bearer " + token,
+                        email
+                );
 
-        if (users == null || users.isEmpty()) {
-            throw new RuntimeException("User không tồn tại");
+        if (
+                users == null ||
+                        users.isEmpty()
+        ) {
+
+            throw new RuntimeException(
+                    "User không tồn tại"
+            );
         }
 
-        String userId = users.get(0).getId();
+        String userId =
+                users.get(0).getId();
 
+        // ✅ lấy tất cả sessions của user
         List<KeycloakSessionResponse> sessions =
-                identityClient.getUserSessions("Bearer " + token, userId);
+                identityClient.getUserSessions(
+                        "Bearer " + token,
+                        userId
+                );
 
-        if (sessions == null || sessions.size() <= 1) {
-            return; // không cần xoá
+        // ✅ không có hoặc chỉ có 1 session
+        if (
+                sessions == null ||
+                        sessions.size() <= 1
+        ) {
+
+            return;
         }
 
-        // 🔥 sort theo lastAccess (mới nhất lên đầu)
-        sessions.sort((s1, s2) ->
-                Long.compare(s2.getLastAccess(), s1.getLastAccess())
+        // ✅ sort theo thời gian access mới nhất
+        sessions.sort(
+                (s1, s2) ->
+                        Long.compare(
+                                s2.getLastAccess(),
+                                s1.getLastAccess()
+                        )
         );
 
-        // 🔥 giữ session đầu tiên (mới nhất)
-        KeycloakSessionResponse latestSession = sessions.get(0);
+        // ✅ giữ session mới nhất
+        KeycloakSessionResponse latestSession =
+                sessions.get(0);
 
-        log.info("Keeping latest session: {}", latestSession.getId());
+        log.info(
+                "Keeping latest session: {}",
+                latestSession.getId()
+        );
 
-        // 🔥 xoá các session còn lại
+        // ✅ xoá các session cũ
         for (int i = 1; i < sessions.size(); i++) {
-            KeycloakSessionResponse session = sessions.get(i);
 
-            log.info("Deleting old session: {}", session.getId());
+            KeycloakSessionResponse session =
+                    sessions.get(i);
 
-            identityClient.deleteSession(
-                    "Bearer " + token,
+            log.info(
+                    "Deleting old session: {}",
                     session.getId()
             );
+
+            try {
+
+                identityClient.deleteSession(
+                        "Bearer " + token,
+                        session.getId()
+                );
+
+            } catch (Exception e) {
+
+                log.error(
+                        "Cannot delete session {}",
+                        session.getId(),
+                        e
+                );
+            }
         }
     }
 
@@ -547,10 +599,7 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
-    public void createUserFromGoogle(String email,
-                                     String firstName,
-                                     String lastName,
-                                     String keycloakUserId) {
+    public void createUserFromGoogle(String email, String firstName, String lastName, String keycloakUserId) {
 
         Optional<User> userOpt = userRepository.findByEmail(email);
         if (userOpt.isPresent()) {
@@ -588,26 +637,18 @@ public class UserServiceImpl implements IUserService {
 
         GetRoleIdResponse role = roleCacheService.getRole(roleName);
 
-        identityClient.mappingRealmRoleToUser(
-                "Bearer " + token,
-                userId,
-                List.of(role)
-        );
+        identityClient.mappingRealmRoleToUser("Bearer " + token, userId, List.of(role));
     }
 
     private LocalDateTime formatDateFromStringToDate(String date) {
-        return LocalDate.parse(date)
-                .atStartOfDay();
+        return LocalDate.parse(date).atStartOfDay();
     }
 
     public static String toIsoDateStringVn(LocalDateTime dateTime) {
         if (dateTime == null) {
             return null;
         }
-        return dateTime
-                .atZone(VN_ZONE)
-                .toLocalDate()
-                .format(FORMATTER);
+        return dateTime.atZone(VN_ZONE).toLocalDate().format(FORMATTER);
     }
 
     @Override
@@ -674,15 +715,11 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
-    public void forceLogoutUser(String userId) {
+    public void forceLogoutUser(String userId, String oldSessionId) {
         Map<String, String> payload = new HashMap<>();
         payload.put("type", "FORCE_LOGOUT");
-
-        messagingTemplate.convertAndSendToUser(
-                userId,
-                "/queue/logout",
-                payload
-        );
+        payload.put("sessionId", oldSessionId);
+        messagingTemplate.convertAndSendToUser(userId, "/queue/logout", payload);
     }
 }
 

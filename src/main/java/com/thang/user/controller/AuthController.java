@@ -7,6 +7,7 @@ import com.thang.user.model.dto.UserDTO;
 import com.thang.user.model.dto.identity.TokenUserResponse;
 import com.thang.user.model.entity.User;
 import com.thang.user.service.user.IUserService;
+import com.thang.user.service.user.SessionService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -23,9 +24,11 @@ import java.util.Map;
 public class AuthController {
 
     private final IUserService userService;
+    private final SessionService sessionService;
 
-    public AuthController(IUserService userService) {
+    public AuthController(IUserService userService, SessionService sessionService) {
         this.userService = userService;
+        this.sessionService = sessionService;
     }
 
     @PostMapping("/login")
@@ -115,7 +118,45 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<?> logout(@RequestBody LogoutRequest logoutRequest) {
+    public ResponseEntity<?> logout(@RequestBody LogoutRequest logoutRequest, @CookieValue(
+            value = "accessToken",
+            required = false
+    ) String accessTokenReq) {
+        User userEntity = new User();
+        if (accessTokenReq != null) {
+
+            UserDTO user =
+                    userService.extractUsername(
+                            accessTokenReq
+                    );
+
+            if (user != null) {
+                 userEntity =
+                        this.userService.findUserByEmail(
+                                user.getEmail()
+                        );
+
+                String userId =
+                        userEntity.getUserId();
+
+                String currentSession =
+                        sessionService.getSession(
+                                userId
+                        );
+
+                if (
+                        currentSession != null &&
+                                currentSession.equals(
+                                        logoutRequest.getSessionId()
+                                )
+                ) {
+
+                    sessionService.removeSession(
+                            userId
+                    );
+                }
+            }
+        }
 
         ResponseCookie accessToken = ResponseCookie.from("accessToken", "")
                 .httpOnly(true)
@@ -128,7 +169,7 @@ public class AuthController {
                 .path("/")
                 .maxAge(0)
                 .build();
-        this.userService.logoutAllSessions(logoutRequest.getEmail());
+        this.userService.logoutAllSessions(userEntity.getEmail());
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, accessToken.toString())
@@ -137,14 +178,28 @@ public class AuthController {
     }
 
     @GetMapping("/callbackGoogle")
-    public void callback(@RequestParam String code,
-                         HttpServletResponse response) throws IOException {
+    public void callback(
 
-        TokenUserResponse token = userService.handleOAuth2Login(code);
+            @RequestParam String code,
 
-        String accessToken = token.getAccess_token();
+            @RequestParam(required = false)
+            String state,
 
-        Cookie cookie = new Cookie("accessToken", accessToken);
+            HttpServletResponse response
+
+    ) throws IOException {
+
+        TokenUserResponse token =
+                userService.handleOAuth2Login(
+                        code,
+                        state
+                );
+
+        Cookie cookie = new Cookie(
+                "accessToken",
+                token.getAccess_token()
+        );
+
         cookie.setHttpOnly(true);
         cookie.setSecure(false);
         cookie.setPath("/");
@@ -152,7 +207,9 @@ public class AuthController {
 
         response.addCookie(cookie);
 
-        response.sendRedirect("http://localhost:5173/");
+        response.sendRedirect(
+                "http://localhost:5173/"
+        );
     }
 
     @GetMapping("/checkEmail")
