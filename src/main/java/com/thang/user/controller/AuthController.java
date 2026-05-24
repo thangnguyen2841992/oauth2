@@ -11,6 +11,7 @@ import com.thang.user.service.user.SessionService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.jspecify.annotations.NonNull;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
@@ -36,21 +37,9 @@ public class AuthController {
         try {
             TokenUserResponse res = userService.login(request);
 
-            ResponseCookie accessToken = ResponseCookie.from("accessToken", res.getAccess_token())
-                    .httpOnly(true)
-                    .path("/")
-                    .maxAge(5 * 60)
-                    .sameSite("Lax")
-                    .secure(false)
-                    .build();
+            ResponseCookie accessToken = getResponseCookie(res);
 
-            ResponseCookie refreshToken = ResponseCookie.from("refreshToken", res.getRefresh_token())
-                    .httpOnly(true)
-                    .path("/")
-                    .maxAge(30 * 60)
-                    .sameSite("Lax")
-                    .secure(false)
-                    .build();
+            ResponseCookie refreshToken = getCookie(res);
 
             return ResponseEntity.ok()
                     .header(HttpHeaders.SET_COOKIE, accessToken.toString())
@@ -64,6 +53,26 @@ public class AuthController {
                     "message", "Sai tài khoản hoặc mật khẩu"
             ));
         }
+    }
+
+    private static @NonNull ResponseCookie getCookie(TokenUserResponse res) {
+        return ResponseCookie.from("refreshToken", res.getRefresh_token())
+                .httpOnly(true)
+                .path("/")
+                .maxAge(30 * 60)
+                .sameSite("Lax")
+                .secure(false)
+                .build();
+    }
+
+    private static @NonNull ResponseCookie getResponseCookie(TokenUserResponse res) {
+        return ResponseCookie.from("accessToken", res.getAccess_token())
+                .httpOnly(true)
+                .path("/")
+                .maxAge(5 * 60)
+                .sameSite("Lax")
+                .secure(false)
+                .build();
     }
 
     @PostMapping("/register")
@@ -131,7 +140,7 @@ public class AuthController {
                     );
 
             if (user != null) {
-                 userEntity =
+                userEntity =
                         this.userService.findUserByEmail(
                                 user.getEmail()
                         );
@@ -231,21 +240,9 @@ public class AuthController {
         try {
             TokenUserResponse res = userService.refresh(refreshToken);
 
-            ResponseCookie accessToken = ResponseCookie.from("accessToken", res.getAccess_token())
-                    .httpOnly(true)
-                    .path("/")
-                    .maxAge(5 * 60)
-                    .sameSite("Lax")
-                    .secure(false)
-                    .build();
+            ResponseCookie accessToken = getResponseCookie(res);
 
-            ResponseCookie newRefreshToken = ResponseCookie.from("refreshToken", res.getRefresh_token())
-                    .httpOnly(true)
-                    .path("/")
-                    .maxAge(30 * 60)
-                    .sameSite("Lax")
-                    .secure(false)
-                    .build();
+            ResponseCookie newRefreshToken = getCookie(res);
 
             return ResponseEntity.ok()
                     .header(HttpHeaders.SET_COOKIE, accessToken.toString())
