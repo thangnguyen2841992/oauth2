@@ -1,5 +1,6 @@
 package com.thang.user.controller;
 
+import com.thang.user.model.dto.UserDTO;
 import com.thang.user.service.user.IUserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,5 +34,11 @@ public class UserRestController {
     @GetMapping("/getAllUsers")
     public ResponseEntity<?> getAllUsers() {
         return new ResponseEntity<>(userService.getAllUsers(), HttpStatus.OK);
+    }
+
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'USER')")
+    @GetMapping("/findUserByEmail")
+    public ResponseEntity<UserDTO> findUserByEmail(@RequestParam String email) {
+        return new ResponseEntity<>(userService.findUserByEmailDTO(email), HttpStatus.OK);
     }
 }
