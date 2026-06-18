@@ -20,6 +20,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
@@ -70,6 +71,7 @@ public class UserServiceImpl implements IUserService {
 
 
     @Override
+    @Transactional
     public User createUser(CreateUserRequest dto) throws Exception {
         boolean isExistEmail = this.userRepository.existsByEmail(dto.getEmail());
         if (isExistEmail) {
@@ -102,6 +104,7 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<UserDTO> getAllUsers() {
         List<User> users = this.userRepository.findAll();
         List<UserDTO> dtos = new ArrayList<>();
@@ -113,6 +116,7 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public User findUserByEmail(String email) {
         return userRepository
                 .findByEmail(email)
@@ -120,6 +124,15 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public UserDTO findUserByEmailDTO(String email) {
+        return mapperUserToUserDTO(userRepository
+                .findByEmail(email)
+                .orElse(null));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public UserDTO getUserById(Long id) {
         Optional<User> user = this.userRepository.findById(id);
         UserDTO dto = new UserDTO();
@@ -130,11 +143,13 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
+    @Transactional
     public UserDTO updateUser(Long id, UserDTO dto) {
         return null;
     }
 
     @Override
+    @Transactional
     public void deleteUser(String userId) {
         Optional<User> user = this.userRepository.findByUserId(userId);
         if (user.isPresent()) {
@@ -145,6 +160,7 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
+    @Transactional
     public TokenUserResponse login(LoginRequest loginRequest) {
 
         User user = userRepository.findByEmail(loginRequest.getEmail()).orElseThrow(() -> new RuntimeException("Tài khoản hoặc mật khẩu không đúng"));

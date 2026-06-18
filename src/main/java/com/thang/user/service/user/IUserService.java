@@ -17,6 +17,8 @@ public interface IUserService {
 
     User findUserByEmail(String email);
 
+    UserDTO findUserByEmailDTO(String email);
+
     UserDTO getUserById(Long id);
 
     UserDTO updateUser(Long id, UserDTO dto);
