@@ -1,10 +1,6 @@
 package com.thang.user.controller;
 
-import com.thang.user.model.dto.CreateUserRequest;
-import com.thang.user.model.dto.LoginRequest;
-import com.thang.user.model.dto.LogoutRequest;
-import com.thang.user.model.dto.UserDTO;
-import com.thang.user.model.dto.identity.TokenUserResponse;
+import com.thang.user.model.dto.*;
 import com.thang.user.model.entity.User;
 import com.thang.user.service.user.IUserService;
 import com.thang.user.service.user.SessionService;
@@ -13,6 +9,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.jspecify.annotations.NonNull;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -35,10 +32,10 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
         try {
+
             TokenUserResponse res = userService.login(request);
 
             ResponseCookie accessToken = getResponseCookie(res);
-
             ResponseCookie refreshToken = getCookie(res);
 
             return ResponseEntity.ok()
@@ -48,10 +45,12 @@ public class AuthController {
                             "message", "Login success"
                     ));
 
-        } catch (Exception e) {
-            return ResponseEntity.status(401).body(Map.of(
-                    "message", "Sai tài khoản hoặc mật khẩu"
-            ));
+        } catch (RuntimeException e) {
+
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of(
+                            "message", e.getMessage()
+                    ));
         }
     }
 
@@ -83,8 +82,9 @@ public class AuthController {
 
             return ResponseEntity.ok(
                     Map.of(
-                            "userId", saveUser.getId(),
-                            "email", saveUser.getEmail()
+                            "email", saveUser.getEmail(),
+                            "userId", saveUser.getUserId(),
+                            "message", "Đăng ký thành công. Vui lòng kiểm tra email để kích hoạt tài khoản."
                     )
             );
 
@@ -186,40 +186,40 @@ public class AuthController {
                 .body(Map.of("message", "logged out"));
     }
 
-    @GetMapping("/callbackGoogle")
-    public void callback(
-
-            @RequestParam String code,
-
-            @RequestParam(required = false)
-            String state,
-
-            HttpServletResponse response
-
-    ) throws IOException {
-
-        TokenUserResponse token =
-                userService.handleOAuth2Login(
-                        code,
-                        state
-                );
-
-        Cookie cookie = new Cookie(
-                "accessToken",
-                token.getAccess_token()
-        );
-
-        cookie.setHttpOnly(true);
-        cookie.setSecure(false);
-        cookie.setPath("/");
-        cookie.setMaxAge(300);
-
-        response.addCookie(cookie);
-
-        response.sendRedirect(
-                "http://localhost:5173/"
-        );
-    }
+//    @GetMapping("/callbackGoogle")
+//    public void callback(
+//
+//            @RequestParam String code,
+//
+//            @RequestParam(required = false)
+//            String state,
+//
+//            HttpServletResponse response
+//
+//    ) throws IOException {
+//
+//        TokenUserResponse token =
+//                userService.handleOAuth2Login(
+//                        code,
+//                        state
+//                );
+//
+//        Cookie cookie = new Cookie(
+//                "accessToken",
+//                token.getAccess_token()
+//        );
+//
+//        cookie.setHttpOnly(true);
+//        cookie.setSecure(false);
+//        cookie.setPath("/");
+//        cookie.setMaxAge(300);
+//
+//        response.addCookie(cookie);
+//
+//        response.sendRedirect(
+//                "http://localhost:5173/"
+//        );
+//    }
 
     @GetMapping("/checkEmail")
     public ResponseEntity<?> checkEmail(@RequestParam String email) {

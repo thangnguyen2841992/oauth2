@@ -1,5 +1,6 @@
 package com.thang.user;
 
+import com.nihongo.security.CommonSecurityConfig;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
@@ -8,12 +9,14 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 import org.springframework.cloud.openfeign.EnableFeignClients;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 @SpringBootApplication
 @EnableFeignClients
 @EnableDiscoveryClient
+@Import(CommonSecurityConfig.class)
 public class UserServiceApplication {
 
     public static void main(String[] args) {
@@ -24,7 +27,7 @@ public class UserServiceApplication {
     public RedissonClient redissonClient() {
         Config config = new Config();
         config.useSingleServer()
-                .setAddress("redis://127.0.0.1:6379");
+                .setAddress("redis://180.93.115.154:6379");
 
         return Redisson.create(config);
     }

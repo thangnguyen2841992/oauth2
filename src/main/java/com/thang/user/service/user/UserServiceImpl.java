@@ -1,741 +1,777 @@
 package com.thang.user.service.user;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nimbusds.jwt.SignedJWT;
 import com.thang.user.model.dto.CreateUserRequest;
 import com.thang.user.model.dto.LoginRequest;
 import com.thang.user.model.dto.MessageResponseUser;
+import com.thang.user.model.dto.TokenUserResponse;
 import com.thang.user.model.dto.UserDTO;
-import com.thang.user.model.dto.identity.*;
 import com.thang.user.model.entity.User;
 import com.thang.user.repository.IUserRepository;
-import com.thang.user.repository.IdentityClient;
-import lombok.experimental.NonFinal;
+import io.jsonwebtoken.Claims;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.http.*;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
-import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class UserServiceImpl implements IUserService {
+
     private final IUserRepository userRepository;
-    private final IdentityClient identityClient;
-    private final TokenCacheService tokenCacheService;
-    private final ClientUuidCacheService clientUuidCacheService;
-    private final RoleCacheService roleCacheService;
+
     private final KafkaTemplate<String, Object> kafkaTemplate;
+
     private final PasswordEncoder passwordEncoder;
+
     private final SimpMessagingTemplate messagingTemplate;
+
     private final SessionService sessionService;
 
+    private final TokenService tokenService;
 
-    @Value("${spring.idp.client-id}")
-    @NonFinal
-    private String clientId;
-
-    @Value("${spring.idp.client-secret}")
-    @NonFinal
-    private String clientSecret;
-
-    public UserServiceImpl(IUserRepository userRepository, IdentityClient identityClient, TokenCacheService tokenCacheService, ClientUuidCacheService clientUuidCacheService, RoleCacheService roleCacheService, KafkaTemplate<String, Object> kafkaTemplate, PasswordEncoder passwordEncoder, SimpMessagingTemplate messagingTemplate, SessionService sessionService) {
-        this.userRepository = userRepository;
-        this.identityClient = identityClient;
-        this.tokenCacheService = tokenCacheService;
-        this.clientUuidCacheService = clientUuidCacheService;
-        this.roleCacheService = roleCacheService;
-        this.kafkaTemplate = kafkaTemplate;
-        this.passwordEncoder = passwordEncoder;
-        this.messagingTemplate = messagingTemplate;
-        this.sessionService = sessionService;
-    }
+    private final JwtService jwtService;
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
+
     private static final ZoneId VN_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
+    private static final String DEFAULT_ROLE = "USER";
+
+    // =========================================================
+    // CREATE USER
+    // =========================================================
 
     @Override
     @Transactional
     public User createUser(CreateUserRequest dto) throws Exception {
-        boolean isExistEmail = this.userRepository.existsByEmail(dto.getEmail());
+
+        if (dto == null) {
+            throw new Exception("Thông tin user không được để trống");
+        }
+
+        if (dto.getEmail() == null || dto.getEmail().isBlank()) {
+
+            throw new Exception("Email không được để trống");
+        }
+
+        boolean isExistEmail = userRepository.existsByEmail(dto.getEmail());
+
         if (isExistEmail) {
             throw new Exception("Email đã tồn tại");
         }
+
+        if (dto.getPassword() == null || dto.getPassword().isBlank()) {
+
+            throw new Exception("Password không được để trống");
+        }
+
+        if (!dto.getPassword().equals(dto.getConfirmPassword())) {
+
+            throw new Exception("Password không khớp");
+        }
+
+        if (isInvalidPassword(dto.getPassword())) {
+
+            throw new Exception("Password phải có ít nhất 8 ký tự, " + "bao gồm chữ hoa, số và ký tự đặc biệt");
+        }
+
         String activeCode = createActiveCode();
+
         User user = new User();
+
+        user.setUserId(UUID.randomUUID().toString());
+
         user.setFirstName(dto.getFirstName());
+
         user.setLastName(dto.getLastName());
+
         user.setDateOfBirth(formatDateFromStringToDate(dto.getDateOfBirth()));
+
         user.setEmail(dto.getEmail());
+
         user.setAddress(dto.getAddress());
+
         user.setActive(false);
+
+        user.setPassword(passwordEncoder.encode(dto.getPassword()));
+
         user.setCodeActive(activeCode);
+
         user.setCodeActiveExpiredAt(generateExpiredTime(1));
+
         user.setDateCreated(LocalDateTime.now());
+
         user.setDateModified(LocalDateTime.now());
-        user.setRoleName(dto.getRoleName());
+
+        user.setRoleName(DEFAULT_ROLE);
+
         User savedUser = userRepository.save(user);
+
+        // =====================================================
+        // GỬI EMAIL KÍCH HOẠT
+        // =====================================================
+
         MessageResponseUser message = new MessageResponseUser();
+
+        message.setToUserId(savedUser.getUserId());
+
         message.setToUserEmail(savedUser.getEmail());
+
         message.setToUserFullName(savedUser.getFirstName() + " " + savedUser.getLastName());
-        message.setToUserId(savedUser.getId()); // hoặc id DB
+
         message.setActiveCode(activeCode);
 
         kafkaTemplate.send("send-email-active-response", message);
-        log.info("Đã gửi email cho userId: ", savedUser.getUserId());
-        mapperUserToUserDTO(savedUser);
+
+        log.info("Đã gửi email kích hoạt cho userId={}", savedUser.getUserId());
+
         return savedUser;
     }
+
+    // =========================================================
+    // GET ALL USERS
+    // =========================================================
 
     @Override
     @Transactional(readOnly = true)
     public List<UserDTO> getAllUsers() {
-        List<User> users = this.userRepository.findAll();
+
+        List<User> users = userRepository.findAll();
+
         List<UserDTO> dtos = new ArrayList<>();
+
         for (User user : users) {
-            UserDTO dto = mapperUserToUserDTO(user);
-            dtos.add(dto);
+
+            dtos.add(mapperUserToUserDTO(user));
         }
+
         return dtos;
     }
+
+    // =========================================================
+    // FIND USER BY EMAIL
+    // =========================================================
 
     @Override
     @Transactional(readOnly = true)
     public User findUserByEmail(String email) {
-        return userRepository
-                .findByEmail(email)
-                .orElse(null);
+
+        if (email == null || email.isBlank()) {
+            return null;
+        }
+
+        return userRepository.findByEmail(email).orElse(null);
     }
+
+    // =========================================================
+    // FIND USER BY EMAIL DTO
+    // =========================================================
 
     @Override
     @Transactional(readOnly = true)
     public UserDTO findUserByEmailDTO(String email) {
-        return mapperUserToUserDTO(userRepository
-                .findByEmail(email)
-                .orElse(null));
+
+        User user = userRepository.findByEmail(email).orElse(null);
+
+        if (user == null) {
+            return null;
+        }
+
+        return mapperUserToUserDTO(user);
     }
 
-    @Override
-    @Transactional(readOnly = true)
-    public UserDTO getUserById(Long id) {
-        Optional<User> user = this.userRepository.findById(id);
-        UserDTO dto = new UserDTO();
-        if (user.isPresent()) {
-            dto = mapperUserToUserDTO(user.get());
-        }
-        return dto;
-    }
 
     @Override
     @Transactional
     public UserDTO updateUser(Long id, UserDTO dto) {
-        return null;
+
+        if (dto == null) {
+            return null;
+        }
+
+        Optional<User> optionalUser = userRepository.findById(id);
+
+        if (optionalUser.isEmpty()) {
+            return null;
+        }
+
+        User user = optionalUser.get();
+
+        if (dto.getFirstName() != null) {
+
+            user.setFirstName(dto.getFirstName());
+        }
+
+        if (dto.getLastName() != null) {
+
+            user.setLastName(dto.getLastName());
+        }
+
+        if (dto.getPhoneNumber() != null) {
+
+            user.setPhoneNumber(dto.getPhoneNumber());
+        }
+
+        if (dto.getAddress() != null) {
+
+            user.setAddress(dto.getAddress());
+        }
+
+        user.setDateModified(LocalDateTime.now());
+
+        User savedUser = userRepository.save(user);
+
+        return mapperUserToUserDTO(savedUser);
     }
+
+    // =========================================================
+    // DELETE USER
+    // =========================================================
 
     @Override
     @Transactional
     public void deleteUser(String userId) {
-        Optional<User> user = this.userRepository.findByUserId(userId);
-        if (user.isPresent()) {
-            var token = tokenCacheService.getClientToken();
-            this.identityClient.deleteUser(user.get().getUserId(), "Bearer " + token);
-            this.userRepository.deleteById(user.get().getId());
+
+        if (userId == null || userId.isBlank()) {
+
+            return;
         }
+
+        User user = userRepository.findByUserId(userId).orElseThrow(() -> new RuntimeException("USER_NOT_FOUND"));
+
+        // Xóa session Redis trước
+        sessionService.removeSession(user.getUserId());
+
+        // Xóa user DB
+        userRepository.delete(user);
+
+        log.info("Deleted user: userId={}", userId);
     }
+
+    // =========================================================
+    // LOGIN
+    // =========================================================
 
     @Override
     @Transactional
     public TokenUserResponse login(LoginRequest loginRequest) {
 
+        if (loginRequest == null || loginRequest.getEmail() == null || loginRequest.getEmail().isBlank()) {
+
+            throw new RuntimeException("Email không được để trống");
+        }
+
+        if (loginRequest.getPassword() == null || loginRequest.getPassword().isBlank()) {
+
+            throw new RuntimeException("Password không được để trống");
+        }
+
         User user = userRepository.findByEmail(loginRequest.getEmail()).orElseThrow(() -> new RuntimeException("Tài khoản hoặc mật khẩu không đúng"));
 
         if (!user.isActive()) {
+
             throw new RuntimeException("Tài khoản chưa kích hoạt");
         }
-        logoutAllSessions(loginRequest.getEmail());
 
-        // ✅ session mới từ frontend
+        if (!passwordEncoder.matches(loginRequest.getPassword(), user.getPassword())) {
+
+            throw new RuntimeException("Tài khoản hoặc mật khẩu không đúng");
+        }
+
+        // =====================================================
+        // TẠO SESSION MỚI
+        // =====================================================
+
         String newSessionId = loginRequest.getSessionId();
 
         if (newSessionId == null || newSessionId.isBlank()) {
 
-            throw new RuntimeException("SessionId is required");
+            newSessionId = UUID.randomUUID().toString();
         }
 
-        // ✅ lấy session cũ trong Redis
+        // =====================================================
+        // LẤY SESSION CŨ
+        // =====================================================
+
         String oldSessionId = sessionService.getSession(user.getUserId());
 
-        TokenUserResponse token = identityClient.login(LoginUsingKeyCloakParam.builder().grant_type("password").client_secret(clientSecret).client_id(clientId).scope("openid").username(loginRequest.getEmail()).password(loginRequest.getPassword()).build());
-        // ✅ login thành công mới logout tab cũ
+        // =====================================================
+        // FORCE LOGOUT SESSION CŨ
+        // =====================================================
+
         if (oldSessionId != null && !oldSessionId.equals(newSessionId)) {
 
             forceLogoutUser(user.getUserId(), oldSessionId);
         }
 
-        // ✅ save session mới vào Redis
+        // =====================================================
+        // SAVE SESSION MỚI
+        // =====================================================
+
         sessionService.saveSession(user.getUserId(), newSessionId);
 
+        // =====================================================
+        // UPDATE LAST LOGIN
+        // =====================================================
+
         user.setLastLogin(LocalDateTime.now());
+
+        user.setDateModified(LocalDateTime.now());
+
         userRepository.save(user);
 
+        // =====================================================
+        // GENERATE JWT
+        // =====================================================
 
-        return token;
+        return tokenService.generateToken(user, newSessionId);
     }
 
+    // =========================================================
+    // REFRESH TOKEN
+    // =========================================================
+
     @Override
-    public TokenUserResponse handleOAuth2Login(String code, String newSessionId) {
+    @Transactional
+    public TokenUserResponse refresh(String refreshToken) {
 
-        TokenUserResponse token = this.exchangeCodeToToken(code);
+        if (refreshToken == null || refreshToken.isBlank()) {
 
-        String accessToken = token.getAccess_token();
-
-        String email = extractClaim(accessToken, "email");
-
-        String name = extractClaim(accessToken, "name");
-
-        String sub = extractClaim(accessToken, "sub");
-
-        // ✅ session cũ
-        String oldSessionId = sessionService.getSession(sub);
-
-        // ✅ force logout tab cũ
-        if (oldSessionId != null && !oldSessionId.equals(newSessionId)) {
-            forceLogoutUser(sub, oldSessionId);
+            throw new RuntimeException("Refresh token không được để trống");
         }
 
-        // ✅ save session mới
-        sessionService.saveSession(sub, newSessionId);
+        /*
+         * TokenService xử lý:
+         *
+         * 1. Verify chữ ký JWT
+         * 2. Verify expiration
+         * 3. Kiểm tra type = refresh
+         * 4. Lấy userId
+         * 5. Lấy sessionId
+         * 6. Kiểm tra session Redis
+         * 7. Tạo access token mới
+         */
 
-        createUserFromGoogle(email, name, "", sub);
-
-        return token;
+        return tokenService.refreshToken(refreshToken);
     }
 
-    @Override
-    public void sendResetPassword(String userId, String password, String token) {
-        String url = "http://localhost:8180/admin/realms/nihongo/users/" + userId + "/reset-password";
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(token); // 👈 token admin
-        headers.setContentType(MediaType.APPLICATION_JSON);
-
-        Map<String, Object> body = new HashMap<>();
-        body.put("type", "password");
-        body.put("value", password);
-        body.put("temporary", false);
-
-        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-
-        new RestTemplate().exchange(url, HttpMethod.PUT, request, String.class);
-    }
+    // =========================================================
+    // UPDATE PASSWORD
+    // =========================================================
 
     @Override
+    @Transactional
     public String updatePassword(CreateUserRequest request) {
-        if (!isValidPassword(request.getPassword())) {
+
+        if (request == null) {
+            return "INVALID_REQUEST";
+        }
+
+        if (isInvalidPassword(request.getPassword())) {
+
             return "Password not validation";
         }
-        if (!request.getConfirmPassword().equals(request.getPassword())) {
+
+        if (!Objects.equals(request.getPassword(), request.getConfirmPassword())) {
+
             return "Password not matches";
         }
-        Optional<User> userOptional = this.userRepository.findByEmail(request.getEmail());
-        if (userOptional.isPresent()) {
-            User user = userOptional.get();
-            var token = tokenCacheService.getClientToken();
-            sendResetPassword(user.getUserId(), "thuThuy@1", token);
-            user.setPassword(passwordEncoder.encode(request.getPassword()));
-            user.setDateModified(LocalDateTime.now());
-            this.userRepository.save(user);
+
+        if (request.getEmail() == null || request.getEmail().isBlank()) {
+
+            return "EMAIL_REQUIRED";
         }
+
+        Optional<User> userOptional = userRepository.findByEmail(request.getEmail());
+
+        if (userOptional.isEmpty()) {
+            return "USER_NOT_FOUND";
+        }
+
+        User user = userOptional.get();
+
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+
+        user.setDateModified(LocalDateTime.now());
+
+        userRepository.save(user);
+
+        /*
+         * Password thay đổi => invalidate session hiện tại.
+         *
+         * User sẽ phải login lại.
+         */
+        sessionService.removeSession(user.getUserId());
+
+        log.info("Password updated and session invalidated: userId={}", user.getUserId());
+
         return "SUCCESS";
     }
 
+    // =========================================================
+    // PASSWORD VALIDATION
+    // =========================================================
+
+    private static boolean isInvalidPassword(String password) {
+
+        if (password == null) {
+            return true;
+        }
+        String regex = "^(?=.*[0-9])" + "(?=.*[A-Z])" + "(?=.*[@#$%^&+=!])" + "(?=.{8,}).*$";
+
+        return !Pattern.compile(regex).matcher(password).matches();
+    }
+
     @Override
-    public String checkEmailWhenLogin(String email) {
+    public UserDTO extractUsername(String token) {
 
-        String token = tokenCacheService.getClientToken();
+        try {
 
-        return identityClient.findUserByEmail("Bearer " + token, email).stream().findFirst().map(user -> {
-            List<UserKeyCloakResponse> identities = identityClient.federatedIdentity("Bearer " + token, user.getId());
+            if (token == null || token.isBlank()) {
 
-            if (identities == null || identities.isEmpty()) {
-                return "LOCAL";
+                return null;
             }
 
-            return identities.get(0).getIdentityProvider().toUpperCase();
-        }).orElse("NOT_FOUND");
-    }
+            /*
+             * Verify JWT trước khi lấy thông tin.
+             */
+            Claims claims = jwtService.parseAndValidate(token);
 
-    public static boolean isValidPassword(String password) {
-        // Regex pattern
-        String regex = "^(?=.*[0-9])(?=.*[A-Z])(?=.*[@#$%^&+=!])(?=.{8,}).*";
-        Pattern pattern = Pattern.compile(regex);
-        return pattern.matcher(password).matches();
-    }
+            UserDTO dto = new UserDTO();
 
-    public String extractClaim(String token, String claim) {
-        try {
-            String[] parts = token.split("\\.");
-            String payload = new String(Base64.getDecoder().decode(parts[1]));
+            // =================================================
+            // USER ID
+            // =================================================
 
-            ObjectMapper mapper = new ObjectMapper();
-            Map map = mapper.readValue(payload, Map.class);
+            String userId = claims.getSubject();
 
-            return (String) map.get(claim);
+            if (userId != null) {
+
+                dto.setUserId(userId);
+            }
+
+            // =================================================
+            // EMAIL
+            // =================================================
+
+            String email = claims.get("email", String.class);
+
+            if (email != null) {
+
+                dto.setEmail(email);
+            }
+
+            // =================================================
+            // NAME
+            // =================================================
+
+            String name = claims.get("name", String.class);
+
+            if (name != null) {
+
+                dto.setFullName(name);
+            }
+
+            // =================================================
+            // ROLE
+            // =================================================
+
+            Object rolesObject = claims.get("roles");
+
+            if (rolesObject instanceof List<?> roles) {
+
+                List<String> priority = List.of("ADMIN", "STAFF", "USER");
+
+                for (String role : priority) {
+
+                    if (roles.contains(role)) {
+
+                        dto.setRoleName(role);
+
+                        break;
+                    }
+                }
+            }
+
+            return dto;
+
         } catch (Exception e) {
+
+            log.error("Cannot extract user from JWT", e);
+
             return null;
         }
     }
 
-    @Override
-    public List<UserKeyCloakResponse> getAllUsersKeyCloak() {
-        var token = tokenCacheService.getClientToken();
-        return this.identityClient.getAllUsersKeyCloak("Bearer " + token);
-    }
+    // =========================================================
+    // ACTIVE USER
+    // =========================================================
 
     @Override
-    public Map<String, String> getUuidClient() {
-        return this.clientUuidCacheService.getAllClientUuid();
-    }
+    @Transactional
+    public String activeUser(String userId, String activeCode) {
 
-
-    @Override
-    public String activeUser(long userId, String activeCode) {
-
-        Optional<User> userOptional = userRepository.findById(userId);
+        Optional<User> userOptional = userRepository.findByUserId(userId);
 
         if (userOptional.isEmpty()) {
+
             return "NOT_FOUND";
         }
+
         User user = userOptional.get();
+
         if (user.isActive()) {
+
             return "ALREADY_ACTIVE";
         }
-        if (!activeCode.equals(user.getCodeActive())) {
+
+        if (activeCode == null || !activeCode.equals(user.getCodeActive())) {
+
             return "INVALID";
         }
+
         if (user.getCodeActiveExpiredAt() == null || user.getCodeActiveExpiredAt().isBefore(LocalDateTime.now())) {
+
             return "EXPIRED";
         }
-        var token = tokenCacheService.getClientToken();
 
         try {
-            var response = identityClient.createNewUser(UserCreationParam.builder().username(user.getEmail()).firstName(user.getFirstName()).lastName(user.getLastName()).email(user.getEmail()).enabled(true).emailVerified(true).build(), "Bearer " + token);
-
-            String keycloakUserId = extractUserId(response);
-
-            assignDefaultRole(keycloakUserId, user.getRoleName());
 
             user.setActive(true);
-            user.setUserId(keycloakUserId);
+
             user.setCodeActive(null);
+
             user.setCodeActiveExpiredAt(null);
+
+            user.setDateModified(LocalDateTime.now());
+
             userRepository.save(user);
+
+            log.info("Kích hoạt tài khoản thành công: userId={}, email={}", user.getUserId(), user.getEmail());
 
             return "SUCCESS";
 
         } catch (Exception e) {
-            log.error("Active user failed: ", e);
-            return "Kích hoạt thất bại do lỗi hệ thống (Keycloak)";
+
+            log.error("Active user failed: userId={}", userId, e);
+
+            return "Kích hoạt thất bại do lỗi hệ thống";
         }
     }
 
+    // =========================================================
+    // RESEND ACTIVE CODE
+    // =========================================================
+
     @Override
+    @Transactional
     public String resendActiveCode(long userId) {
 
         User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("USER_NOT_FOUND"));
 
         if (user.isActive()) {
+
             throw new RuntimeException("ALREADY_ACTIVE");
         }
 
         if (user.getCodeActiveExpiredAt() != null && user.getCodeActiveExpiredAt().isAfter(LocalDateTime.now())) {
+
             throw new RuntimeException("WAIT_EXPIRED");
         }
 
-        // 🔥 tạo code mới
         String newCode = createActiveCode();
 
         user.setCodeActive(newCode);
-        user.setCodeActiveExpiredAt(generateExpiredTime(1)); // 1 phút
+
+        user.setCodeActiveExpiredAt(generateExpiredTime(1));
+
         userRepository.save(user);
 
-        // gửi mail
         MessageResponseUser message = new MessageResponseUser();
+
+        message.setToUserId(user.getUserId());
+
         message.setToUserEmail(user.getEmail());
+
         message.setToUserFullName(user.getFirstName() + " " + user.getLastName());
-        message.setToUserId(user.getId());
+
         message.setActiveCode(newCode);
 
         kafkaTemplate.send("send-email-active-response", message);
 
+        log.info("Resend activation code: userId={}", user.getUserId());
+
         return "SUCCESS";
     }
 
-//    @Override
-//    public UserDTO extractUsername(String token) {
-//        try {
-//            String[] parts = token.split("\\.");
-//
-//            String payload = new String(Base64.getDecoder().decode(parts[1]));
-//
-//            ObjectMapper mapper = new ObjectMapper();
-//            Map<String, Object> map = mapper.readValue(payload, Map.class);
-//            UserDTO newUserDto = new UserDTO();
-//            newUserDto.setEmail((String) map.get("email"));
-//            newUserDto.setFullName((String) map.get("name"));
-//            Map<String, Object> realmAccess = (Map<String, Object>) map.get("realm_access");
-//
-//            if (realmAccess != null) {
-//                var roles = (List<String>) realmAccess.get("roles");
-//
-//                List<String> priority = List.of("ADMIN", "STAFF", "USER");
-//
-//                if (roles != null) {
-//                    for (String p : priority) {
-//                        if (roles.contains(p)) {
-//                            newUserDto.setRoleName(p);
-//                            break;
-//                        }
-//                    }
-//                }
-//            }
-//            return newUserDto;
-//        } catch (Exception e) {
-//            return null;
-//        }
-//    }
+    // =========================================================
+    // LOGOUT
+    // =========================================================
 
     @Override
-    public UserDTO extractUsername(String token) {
-        try {
-            String[] parts = token.split("\\.");
+    @Transactional
+    public void logout(String userId) {
 
-            if (parts.length < 2) return null;
-
-            String payload = new String(Base64.getUrlDecoder().decode(parts[1]));
-
-            ObjectMapper mapper = new ObjectMapper();
-            Map<String, Object> map = mapper.readValue(payload, Map.class);
-
-            UserDTO newUserDto = new UserDTO();
-            newUserDto.setEmail((String) map.get("email"));
-            newUserDto.setFullName((String) map.get("name"));
-
-            Map<String, Object> realmAccess = (Map<String, Object>) map.get("realm_access");
-
-            if (realmAccess != null) {
-                List<String> roles = (List<String>) realmAccess.get("roles");
-
-                List<String> priority = List.of("ADMIN", "STAFF", "USER");
-
-                if (roles != null) {
-                    for (String p : priority) {
-                        if (roles.contains(p)) {
-                            newUserDto.setRoleName(p);
-                            break;
-                        }
-                    }
-                }
-            }
-
-            return newUserDto;
-
-        } catch (Exception e) {
-            e.printStackTrace(); // ❗ đừng nuốt lỗi
-            return null;
-        }
-    }
-
-    @Override
-    public void logout(String refreshToken) {
-
-        RestTemplate rest = new RestTemplate();
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-
-        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
-        body.add("client_id", "japanese_app");
-        body.add("client_secret", clientSecret);
-        body.add("refresh_token", refreshToken);
-
-        HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(body, headers);
-
-        rest.postForEntity("http://localhost:8180/realms/nihongo/protocol/openid-connect/logout", request, String.class);
-    }
-
-    @Override
-    public TokenUserResponse refresh(String refreshToken) {
-        RefreshTokenParam param = new RefreshTokenParam();
-        param.setClient_id("japanese_app");
-        param.setClient_secret(clientSecret); // nếu có
-        param.setRefresh_token(refreshToken);
-
-        return identityClient.refresh(param);
-    }
-
-    @Override
-    public void logoutAllSessions(String email) {
-
-        String token = tokenCacheService.getClientToken();
-
-        List<UserKeyCloakResponse> users = identityClient.findUserByEmail("Bearer " + token, email);
-
-        if (users == null || users.isEmpty()) {
-            throw new RuntimeException("User không tồn tại");
-        }
-
-        String userId = users.get(0).getId();
-
-        List<KeycloakSessionResponse> sessions = identityClient.getUserSessions("Bearer " + token, userId);
-
-        for (KeycloakSessionResponse session : sessions) {
-            log.info("Deleting session: {}", session.getId());
-            identityClient.deleteSession("Bearer " + token, session.getId());
-        }
-    }
-
-    @Override
-    public void logoutOldSessionsKeepLatest(
-            String email
-    ) {
-
-        // ✅ lấy admin token
-        String token =
-                tokenCacheService.getClientToken();
-
-        // ✅ tìm user Keycloak theo email
-        List<UserKeyCloakResponse> users =
-                identityClient.findUserByEmail(
-                        "Bearer " + token,
-                        email
-                );
-
-        if (
-                users == null ||
-                        users.isEmpty()
-        ) {
-
-            throw new RuntimeException(
-                    "User không tồn tại"
-            );
-        }
-
-        String userId =
-                users.get(0).getId();
-
-        // ✅ lấy tất cả sessions của user
-        List<KeycloakSessionResponse> sessions =
-                identityClient.getUserSessions(
-                        "Bearer " + token,
-                        userId
-                );
-
-        // ✅ không có hoặc chỉ có 1 session
-        if (
-                sessions == null ||
-                        sessions.size() <= 1
-        ) {
+        if (userId == null || userId.isBlank()) {
 
             return;
         }
 
-        // ✅ sort theo thời gian access mới nhất
-        sessions.sort(
-                (s1, s2) ->
-                        Long.compare(
-                                s2.getLastAccess(),
-                                s1.getLastAccess()
-                        )
-        );
+        sessionService.removeSession(userId);
 
-        // ✅ giữ session mới nhất
-        KeycloakSessionResponse latestSession =
-                sessions.get(0);
-
-        log.info(
-                "Keeping latest session: {}",
-                latestSession.getId()
-        );
-
-        // ✅ xoá các session cũ
-        for (int i = 1; i < sessions.size(); i++) {
-
-            KeycloakSessionResponse session =
-                    sessions.get(i);
-
-            log.info(
-                    "Deleting old session: {}",
-                    session.getId()
-            );
-
-            try {
-
-                identityClient.deleteSession(
-                        "Bearer " + token,
-                        session.getId()
-                );
-
-            } catch (Exception e) {
-
-                log.error(
-                        "Cannot delete session {}",
-                        session.getId(),
-                        e
-                );
-            }
-        }
+        log.info("User logged out: userId={}", userId);
     }
 
+    // =========================================================
+    // LOGOUT ALL SESSIONS
+    // =========================================================
 
     @Override
-    public String extractSessionId(String accessToken) {
-        try {
-            SignedJWT jwt = SignedJWT.parse(accessToken);
-            return jwt.getJWTClaimsSet().getStringClaim("session_state");
-        } catch (Exception e) {
-            throw new RuntimeException("Không parse được token");
-        }
-    }
+    @Transactional
+    public void logoutAllSessions(String userId) {
 
-    @Override
-    public void createUserFromGoogle(String email, String firstName, String lastName, String keycloakUserId) {
+        if (userId == null || userId.isBlank()) {
 
-        Optional<User> userOpt = userRepository.findByEmail(email);
-        if (userOpt.isPresent()) {
-            User user = userOpt.get();
-            if (user.getUserId() == null) {
-                user.setUserId(keycloakUserId);
-            }
-            user.setActive(true);
-            user.setProvider("GOOGLE");
-
-            userRepository.save(user);
             return;
         }
 
-        User user = new User();
-        user.setEmail(email);
-        user.setFirstName(firstName);
-        user.setLastName(lastName);
+        /*
+         * Hiện tại Redis chỉ lưu:
+         *
+         * user:session:{userId}
+         *
+         * nên mỗi user chỉ có một session.
+         *
+         * Xóa session này = logout toàn bộ.
+         */
 
-        user.setUserId(keycloakUserId);
+        sessionService.removeSession(userId);
 
-        user.setActive(true);
-        user.setProvider("GOOGLE");
-
-        user.setDateCreated(LocalDateTime.now());
-        user.setDateModified(LocalDateTime.now());
-
-        user.setRoleName("USER");
-        assignDefaultRole(keycloakUserId, "USER");
-        userRepository.save(user);
+        log.info("Logout all sessions: userId={}", userId);
     }
 
-    private void assignDefaultRole(String userId, String roleName) {
-        String token = tokenCacheService.getClientToken();
+    // =========================================================
+    // FORCE LOGOUT
+    // =========================================================
 
-        GetRoleIdResponse role = roleCacheService.getRole(roleName);
+    @Override
+    public void forceLogoutUser(String userId, String oldSessionId) {
 
-        identityClient.mappingRealmRoleToUser("Bearer " + token, userId, List.of(role));
+        if (userId == null || userId.isBlank() || oldSessionId == null || oldSessionId.isBlank()) {
+
+            return;
+        }
+
+        Map<String, String> payload = new HashMap<>();
+
+        payload.put("type", "FORCE_LOGOUT");
+
+        payload.put("sessionId", oldSessionId);
+
+        messagingTemplate.convertAndSendToUser(userId, "/queue/logout", payload);
+
+        log.info("Force logout user: userId={}, sessionId={}", userId, oldSessionId);
+    }
+
+    @Override
+    public String checkEmailWhenLogin(String email) {
+        User user = userRepository.findByEmail(email).get();
+        if (!user.isActive()) {
+            throw new RuntimeException("USER_NOT_ACTIVE");
+        }
+        if (user.getGoogleId() != null && !user.getGoogleId().isBlank()) {
+            return "GOOGLE";
+        }
+        return "LOCAL";
     }
 
     private LocalDateTime formatDateFromStringToDate(String date) {
+
+        if (date == null || date.isBlank()) {
+
+            return null;
+        }
+
         return LocalDate.parse(date).atStartOfDay();
     }
 
     public static String toIsoDateStringVn(LocalDateTime dateTime) {
+
         if (dateTime == null) {
             return null;
         }
+
         return dateTime.atZone(VN_ZONE).toLocalDate().format(FORMATTER);
     }
 
-    @Override
-    public TokenUserResponse exchangeCodeToToken(String code) {
-
-        RestTemplate restTemplate = new RestTemplate();
-
-        String url = "http://localhost:8180/realms/nihongo/protocol/openid-connect/token";
-
-        MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
-        body.add("grant_type", "authorization_code");
-        body.add("client_id", "japanese_app");
-        body.add("client_secret", clientSecret);
-        body.add("code", code);
-        body.add("redirect_uri", "http://localhost:8082/api/auth/callbackGoogle");
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-
-        HttpEntity<?> request = new HttpEntity<>(body, headers);
-
-        return restTemplate.postForObject(url, request, TokenUserResponse.class);
-    }
-
-    private String extractUserId(ResponseEntity<?> response) {
-        List<String> locations = response.getHeaders().get("Location");
-        if (locations == null || locations.isEmpty()) {
-            throw new IllegalStateException("Location header missing in the response");
-        }
-        String location = locations.get(0);
-        String[] split = location.split("/");
-        return split[split.length - 1];
-    }
-
     private UserDTO mapperUserToUserDTO(User user) {
+
         UserDTO dto = new UserDTO();
+
         dto.setFirstName(user.getFirstName());
+
         dto.setLastName(user.getLastName());
+
         dto.setFullName(user.getFirstName() + " " + user.getLastName());
+
         dto.setPhoneNumber(user.getPhoneNumber());
+
         dto.setAddress(user.getAddress());
+
         dto.setEmail(user.getEmail());
-        dto.setId(user.getId());
+
         dto.setDateCreated(toIsoDateStringVn(user.getDateCreated()));
+
         dto.setDateModified(toIsoDateStringVn(user.getDateModified()));
+
         dto.setUserId(user.getUserId());
+
         dto.setDateOfBirth(toIsoDateStringVn(user.getDateOfBirth()));
+
         dto.setLastLogin(toIsoDateStringVn(user.getLastLogin()));
+
         dto.setRoleName(user.getRoleName());
+
         if (user.isActive()) {
+
             dto.setActiveStatus("Đã kích hoạt");
+
         } else {
+
             dto.setActiveStatus("Chưa kích hoạt");
         }
+
         return dto;
     }
 
+    // =========================================================
+    // HELPER - ACTIVE CODE
+    // =========================================================
+
     private String createActiveCode() {
+
         return UUID.randomUUID().toString();
     }
 
     private LocalDateTime generateExpiredTime(int minutes) {
+
         return LocalDateTime.now().plusMinutes(minutes);
     }
-
-    @Override
-    public void forceLogoutUser(String userId, String oldSessionId) {
-        Map<String, String> payload = new HashMap<>();
-        payload.put("type", "FORCE_LOGOUT");
-        payload.put("sessionId", oldSessionId);
-        messagingTemplate.convertAndSendToUser(userId, "/queue/logout", payload);
-    }
 }
-

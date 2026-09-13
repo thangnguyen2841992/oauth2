@@ -24,11 +24,11 @@ public class UserRestController {
         return new ResponseEntity<>(HttpStatus.OK);
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
-    @GetMapping("/getAllUsersKeyCloak")
-    public ResponseEntity<?> getAllUsersKeyCloak() {
-        return new ResponseEntity<>(userService.getAllUsersKeyCloak(), HttpStatus.OK);
-    }
+//    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
+//    @GetMapping("/getAllUsersKeyCloak")
+//    public ResponseEntity<?> getAllUsersKeyCloak() {
+//        return new ResponseEntity<>(userService.getAllUsersKeyCloak(), HttpStatus.OK);
+//    }
 
     @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
     @GetMapping("/getAllUsers")

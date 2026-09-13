@@ -1,12 +1,19 @@
 server:
   port: 8081
+
 spring:
   application:
     name: user-service
+
+  data:
+    redis:
+      host: 180.93.115.154
+      port: 6379
+
   datasource:
-    url: jdbc:mysql://180.93.115.154:3306/nihongo?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
-    username: nihongo_app
-    password: Nihongo@2026
+    url: jdbc:mysql://onehost-amdcloudhn022602.000nethost.com:3306/tsezwyvdhosting_nihongo?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: tsezwyvdhosting_nihongo_app
+    password: thuThuy@1
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
@@ -15,23 +22,9 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.MySQLDialect
-  idp:
-    url: http://localhost:8180
-    client-id: japanese_app
-    # company
-#    client-secret: KL3QoB3145oUkIfyNfnbZzBDd3vY8JcD
-    #home
-    client-secret: DoJs3BI1BiKCzaf9rRWvxpVPsilWoKcU
-    realm: nihongo
-
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: http://localhost:8180/realms/nihongo
 
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: 180.93.115.154:9092
     producer:
       acks: all
       enable-idempotence: true
@@ -48,8 +41,14 @@ eureka:
     service-url:
       defaultZone: http://localhost:8761/eureka
 
+jwt:
+  secret: "U7tjRTsx0baZLsRhHGcc0FA/B7MJ65IfQ0jZHvUyYrE="
+  access-expiration: 300000
+  refresh-expiration: 2592000000
+
 api:
   key: thangdeptrai
+
 logging:
   level:
     org.springframework.cloud.gateway: DEBUG

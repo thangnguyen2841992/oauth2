@@ -13,37 +13,47 @@ import org.springframework.security.web.SecurityFilterChain;
 public class SecurityConfig {
 
     private final JwtCookieFilter jwtCookieFilter;
+    private final JwtAuthenticationConverter jwtAuthenticationConverter;
 
-    public SecurityConfig(JwtCookieFilter jwtCookieFilter) {
+    public SecurityConfig(
+            JwtCookieFilter jwtCookieFilter,
+            JwtAuthenticationConverter jwtAuthenticationConverter) {
+
         this.jwtCookieFilter = jwtCookieFilter;
+        this.jwtAuthenticationConverter = jwtAuthenticationConverter;
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http) throws Exception {
+
         http
-                                                                                                                                      .csrf(AbstractHttpConfigurer::disable)
+                .csrf(AbstractHttpConfigurer::disable)
+
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/active-user/**").permitAll()
                         .requestMatchers("/images/**").permitAll()
-                        .requestMatchers("/api/users/**").hasAnyRole("ADMIN", "STAFF", "USER")
+
+                        .requestMatchers("/api/users/**")
+                        .hasAnyRole("ADMIN", "STAFF", "USER")
+
                         .anyRequest().authenticated()
                 )
+
                 .oauth2ResourceServer(oauth2 -> oauth2
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
+                        .jwt(jwt -> jwt
+                                .jwtAuthenticationConverter(
+                                        jwtAuthenticationConverter
+                                )
+                        )
                 );
 
-        // 👇 QUAN TRỌNG NHẤT
-        http.addFilterBefore(jwtCookieFilter,
-                org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class);
+        http.addFilterBefore(
+                jwtCookieFilter,
+                org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class
+        );
 
         return http.build();
-    }
-
-    @Bean
-    public JwtAuthenticationConverter jwtAuthenticationConverter() {
-        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
-        converter.setJwtGrantedAuthoritiesConverter(new KeycloakRoleConverter());
-        return converter;
     }
 }

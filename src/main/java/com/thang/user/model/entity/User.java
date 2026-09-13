@@ -1,9 +1,6 @@
 package com.thang.user.model.entity;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -18,15 +15,16 @@ import java.util.Date;
 @Getter
 @Setter
 public class User {
+
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private long id;
     private String userId;
     private String firstName;
     private String lastName;
     private LocalDateTime dateOfBirth;
+    @Column(unique = true, nullable = false)
     private String email;
     private String password;
+    private String googleId;
     private String phoneNumber;
     private String address;
     private LocalDateTime dateCreated;
@@ -36,5 +34,4 @@ public class User {
     private boolean isActive;
     private String codeActive;
     private LocalDateTime codeActiveExpiredAt;
-    private String provider;
 }

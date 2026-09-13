@@ -1,11 +1,8 @@
 package com.thang.user.controller;
 
 import com.thang.user.model.dto.CreateUserRequest;
-import com.thang.user.model.dto.identity.ResendActiveRequest;
 import com.thang.user.service.user.IUserService;
 import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -24,7 +21,7 @@ public class AuthViewController {
     }
 
     @GetMapping("/active")
-    public ResponseEntity<?> activeAccount(@RequestParam long userId,
+    public ResponseEntity<?> activeAccount(@RequestParam String userId,
                                            @RequestParam String activeCode,
                                            @RequestParam String email) {
 
@@ -67,20 +64,20 @@ public class AuthViewController {
         return ResponseEntity.badRequest().body("Update failed");
     }
 
-    @PostMapping("/resend-active")
-    public ResponseEntity<?> resendActive(@RequestBody ResendActiveRequest request) {
-
-        if (request.getUserId() == null) {
-            return ResponseEntity.badRequest().body("Missing userId");
-        }
-
-        String result = userService.resendActiveCode(request.getUserId());
-
-        return ResponseEntity.ok(
-                Map.of(
-                        "status", "SUCCESS",
-                        "message", "Đã gửi lại email"
-                )
-        );
-    }
+//    @PostMapping("/resend-active")
+//    public ResponseEntity<?> resendActive(@RequestBody ResendActiveRequest request) {
+//
+//        if (request.getUserId() == null) {
+//            return ResponseEntity.badRequest().body("Missing userId");
+//        }
+//
+//        String result = userService.resendActiveCode(request.getUserId());
+//
+//        return ResponseEntity.ok(
+//                Map.of(
+//                        "status", "SUCCESS",
+//                        "message", "Đã gửi lại email"
+//                )
+//        );
+//    }
 }
