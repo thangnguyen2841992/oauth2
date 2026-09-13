@@ -39,4 +39,10 @@ public interface IUserService {
     void forceLogoutUser(String userId, String sessionId);
     String checkEmailWhenLogin(String email);
     String extractSessionId(String accessToken);
+
+    GoogleLoginResponse  loginWithGoogle(String code);
+
+    TokenUserResponse setupGooglePassword(
+            GoogleSetupPasswordRequest request
+    );
 }

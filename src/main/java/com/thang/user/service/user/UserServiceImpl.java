@@ -1,10 +1,6 @@
 package com.thang.user.service.user;
 
-import com.thang.user.model.dto.CreateUserRequest;
-import com.thang.user.model.dto.LoginRequest;
-import com.thang.user.model.dto.MessageResponseUser;
-import com.thang.user.model.dto.TokenUserResponse;
-import com.thang.user.model.dto.UserDTO;
+import com.thang.user.model.dto.*;
 import com.thang.user.model.entity.User;
 import com.thang.user.repository.IUserRepository;
 import io.jsonwebtoken.Claims;
@@ -53,6 +49,8 @@ public class UserServiceImpl implements IUserService {
     private static final ZoneId VN_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private static final String DEFAULT_ROLE = "USER";
+
+    private final GoogleOAuthService googleOAuthService;
 
     // =========================================================
     // CREATE USER
@@ -764,9 +762,310 @@ public class UserServiceImpl implements IUserService {
 
         Claims claims = jwtService.parseAndValidate(accessToken);
 
-        return claims.get(
-                "sessionId",
-                String.class
-        );
+        return claims.get("sessionId", String.class);
+    }
+
+    @Override
+    @Transactional
+    public GoogleLoginResponse loginWithGoogle(String code) {
+
+        // =========================================================
+        // GOOGLE USER
+        // =========================================================
+
+        GoogleUserInfo googleUser = googleOAuthService.getGoogleUser(code);
+
+        String email = googleUser.getEmail().trim().toLowerCase();
+
+        String googleId = googleUser.getSub();
+
+
+        // =========================================================
+        // CHECK EMAIL
+        // =========================================================
+
+        Optional<User> optionalUser = userRepository.findByEmail(email);
+
+
+        // =========================================================
+        // ĐÃ CÓ ACCOUNT
+        // =========================================================
+
+        if (optionalUser.isPresent()) {
+
+            User user = optionalUser.get();
+
+            // -----------------------------------------------------
+            // Google ID đã tồn tại
+            // -----------------------------------------------------
+
+            if (user.getGoogleId() != null && !user.getGoogleId().isBlank()) {
+
+                if (!user.getGoogleId().equals(googleId)) {
+
+                    throw new RuntimeException("Google account không khớp");
+                }
+            }
+
+            // -----------------------------------------------------
+            // Local account -> link Google
+            // -----------------------------------------------------
+
+            if (user.getGoogleId() == null || user.getGoogleId().isBlank()) {
+
+                user.setGoogleId(googleId);
+
+                user.setDateModified(LocalDateTime.now());
+
+                userRepository.save(user);
+            }
+
+            // -----------------------------------------------------
+            // Active
+            // -----------------------------------------------------
+
+            if (!user.isActive()) {
+
+                throw new RuntimeException("Tài khoản chưa kích hoạt");
+            }
+
+            // -----------------------------------------------------
+            // Login
+            // -----------------------------------------------------
+
+            TokenUserResponse token = createLoginToken(user);
+
+            return GoogleLoginResponse.builder()
+
+                    .status("LOGIN")
+
+                    .token(token)
+
+                    .email(user.getEmail())
+
+                    .firstName(user.getFirstName())
+
+                    .lastName(user.getLastName())
+
+                    .build();
+        }
+
+
+        // =========================================================
+        // CHƯA CÓ ACCOUNT
+        // =========================================================
+
+        String setupToken = jwtService.generateGoogleSetupToken(email, googleId, googleUser.getGiven_name(), googleUser.getFamily_name());
+
+        return GoogleLoginResponse.builder()
+
+                .status("SET_PASSWORD")
+
+                .setupToken(setupToken)
+
+                .email(email)
+
+                .firstName(googleUser.getGiven_name())
+
+                .lastName(googleUser.getFamily_name())
+
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public TokenUserResponse setupGooglePassword(GoogleSetupPasswordRequest request) {
+
+        // =========================================================
+        // VALIDATE REQUEST
+        // =========================================================
+
+        if (request == null) {
+
+            throw new RuntimeException("Request không hợp lệ");
+        }
+
+        if (request.getSetupToken() == null || request.getSetupToken().isBlank()) {
+
+            throw new RuntimeException("Google setup token không được để trống");
+        }
+
+        if (request.getPassword() == null || request.getPassword().isBlank()) {
+
+            throw new RuntimeException("Password không được để trống");
+        }
+
+        if (!request.getPassword().equals(request.getConfirmPassword())) {
+
+            throw new RuntimeException("Password không khớp");
+        }
+
+        if (isInvalidPassword(request.getPassword())) {
+
+            throw new RuntimeException("Password phải có ít nhất 8 ký tự, " + "bao gồm chữ hoa, số và ký tự đặc biệt");
+        }
+
+
+        // =========================================================
+        // VALIDATE GOOGLE SETUP TOKEN
+        // =========================================================
+
+        Claims claims = jwtService.parseGoogleSetupToken(request.getSetupToken());
+
+
+        String email = claims.get("email", String.class);
+
+        String googleId = claims.get("googleId", String.class);
+
+        String firstName = claims.get("firstName", String.class);
+
+        String lastName = claims.get("lastName", String.class);
+
+
+        if (email == null || email.isBlank()) {
+
+            throw new RuntimeException("Google email không hợp lệ");
+        }
+
+        if (googleId == null || googleId.isBlank()) {
+
+            throw new RuntimeException("Google ID không hợp lệ");
+        }
+
+
+        // =========================================================
+        // CHECK RACE CONDITION
+        // =========================================================
+
+        Optional<User> existingUser = userRepository.findByEmail(email);
+
+        if (existingUser.isPresent()) {
+
+            throw new RuntimeException("Email đã được đăng ký");
+        }
+
+
+        // =========================================================
+        // CREATE USER
+        // =========================================================
+
+        User user = new User();
+
+        user.setUserId(UUID.randomUUID().toString());
+
+        user.setFirstName(firstName);
+
+        user.setLastName(lastName);
+
+        user.setEmail(email);
+
+        user.setGoogleId(googleId);
+
+
+        // =========================================================
+        // PASSWORD
+        // =========================================================
+
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+
+
+        // =========================================================
+        // DEFAULT
+        // =========================================================
+
+        user.setRoleName(DEFAULT_ROLE);
+
+        /*
+         * Google đã xác minh email.
+         *
+         * Không cần gửi activation email lần nữa.
+         */
+
+        user.setActive(true);
+
+        user.setCodeActive(null);
+
+        user.setCodeActiveExpiredAt(null);
+
+
+        // =========================================================
+        // DATE
+        // =========================================================
+
+        LocalDateTime now = LocalDateTime.now();
+
+        user.setDateCreated(now);
+
+        user.setDateModified(now);
+
+        user.setLastLogin(now);
+
+
+        // =========================================================
+        // SAVE
+        // =========================================================
+
+        User savedUser = userRepository.save(user);
+
+
+        log.info("Created Google user: userId={}, email={}", savedUser.getUserId(), savedUser.getEmail());
+
+
+        // =========================================================
+        // LOGIN
+        // =========================================================
+
+        return createLoginToken(savedUser);
+    }
+
+    private TokenUserResponse createLoginToken(User user) {
+
+        // =========================================================
+        // SESSION MỚI
+        // =========================================================
+
+        String newSessionId = UUID.randomUUID().toString();
+
+
+        // =========================================================
+        // SESSION CŨ
+        // =========================================================
+
+        String oldSessionId = sessionService.getSession(user.getUserId());
+
+
+        // =========================================================
+        // FORCE LOGOUT SESSION CŨ
+        // =========================================================
+
+        if (oldSessionId != null && !oldSessionId.equals(newSessionId)) {
+
+            forceLogoutUser(user.getUserId(), oldSessionId);
+        }
+
+
+        // =========================================================
+        // SAVE SESSION
+        // =========================================================
+
+        sessionService.saveSession(user.getUserId(), newSessionId);
+
+
+        // =========================================================
+        // LAST LOGIN
+        // =========================================================
+
+        user.setLastLogin(LocalDateTime.now());
+
+        user.setDateModified(LocalDateTime.now());
+
+        userRepository.save(user);
+
+
+        // =========================================================
+        // JWT
+        // =========================================================
+
+        return tokenService.generateToken(user, newSessionId);
     }
 }

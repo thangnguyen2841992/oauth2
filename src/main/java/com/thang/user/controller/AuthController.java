@@ -7,8 +7,10 @@ import com.thang.user.service.user.SessionService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
@@ -21,15 +23,18 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/auth")
 @Slf4j
+@RequiredArgsConstructor
 public class AuthController {
 
     private final IUserService userService;
     private final SessionService sessionService;
 
-    public AuthController(IUserService userService, SessionService sessionService) {
-        this.userService = userService;
-        this.sessionService = sessionService;
-    }
+    @Value("${google.client-id}")
+    private String googleClientId;
+
+    @Value("${google.redirect-uri}")
+    private String googleRedirectUri;
+
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
@@ -129,40 +134,6 @@ public class AuthController {
     }
 
 
-//    @GetMapping("/callbackGoogle")
-//    public void callback(
-//
-//            @RequestParam String code,
-//
-//            @RequestParam(required = false)
-//            String state,
-//
-//            HttpServletResponse response
-//
-//    ) throws IOException {
-//
-//        TokenUserResponse token =
-//                userService.handleOAuth2Login(
-//                        code,
-//                        state
-//                );
-//
-//        Cookie cookie = new Cookie(
-//                "accessToken",
-//                token.getAccess_token()
-//        );
-//
-//        cookie.setHttpOnly(true);
-//        cookie.setSecure(false);
-//        cookie.setPath("/");
-//        cookie.setMaxAge(300);
-//
-//        response.addCookie(cookie);
-//
-//        response.sendRedirect(
-//                "http://localhost:5173/"
-//        );
-//    }
 
     @GetMapping("/checkEmail")
     public ResponseEntity<?> checkEmail(@RequestParam String email) {
@@ -194,6 +165,166 @@ public class AuthController {
             log.warn("Refresh token failed: {}", e.getMessage());
 
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Invalid or expired refresh token"));
+        }
+    }
+
+    @GetMapping("/google")
+    public void googleLogin(
+            HttpServletResponse response
+    ) throws IOException {
+
+        String googleUrl =
+                "https://accounts.google.com/o/oauth2/v2/auth"
+                        + "?client_id=" + googleClientId
+                        + "&redirect_uri=" + googleRedirectUri
+                        + "&response_type=code"
+                        + "&scope=openid%20email%20profile"
+                        + "&prompt=select_account";
+
+        response.sendRedirect(googleUrl);
+    }
+
+
+    // =========================================================
+    // GOOGLE CALLBACK
+    // =========================================================
+
+    @GetMapping("/callbackGoogle")
+    public void callbackGoogle(
+            @RequestParam String code,
+            HttpServletResponse response
+    ) throws IOException {
+
+        GoogleLoginResponse result =
+                userService.loginWithGoogle(code);
+
+
+        // =====================================================
+        // USER ĐÃ CÓ ACCOUNT
+        // =====================================================
+
+        if ("LOGIN".equals(result.getStatus())) {
+
+            setAuthCookies(
+                    response,
+                    result.getToken()
+            );
+
+            response.sendRedirect(
+                    "http://localhost:5173/"
+            );
+
+            return;
+        }
+
+
+        // =====================================================
+        // USER CHƯA CÓ ACCOUNT
+        // =====================================================
+
+        if ("SET_PASSWORD".equals(
+                result.getStatus()
+        )) {
+
+            String redirect =
+                    "http://localhost:5173/google/setup-password"
+                            + "?token="
+                            + result.getSetupToken()
+                            + "&email="
+                            + java.net.URLEncoder.encode(
+                            result.getEmail(),
+                            java.nio.charset.StandardCharsets.UTF_8
+                    );
+
+            response.sendRedirect(
+                    redirect
+            );
+
+            return;
+        }
+
+
+        throw new RuntimeException(
+                "Google login status không hợp lệ"
+        );
+    }
+
+
+    // =========================================================
+    // GOOGLE SET PASSWORD
+    // =========================================================
+
+    @PostMapping("/google/setup-password")
+    public void setupGooglePassword(
+            @RequestBody GoogleSetupPasswordRequest request,
+            HttpServletResponse response
+    ) throws IOException {
+
+        TokenUserResponse token =
+                userService.setupGooglePassword(
+                        request
+                );
+
+        setAuthCookies(
+                response,
+                token
+        );
+
+        response.setStatus(
+                HttpServletResponse.SC_OK
+        );
+    }
+
+    private void setAuthCookies(
+            HttpServletResponse response,
+            TokenUserResponse token
+    ) {
+
+        Cookie accessCookie =
+                new Cookie(
+                        "accessToken",
+                        token.getAccess_token()
+                );
+
+        accessCookie.setHttpOnly(true);
+
+        accessCookie.setSecure(false);
+
+        accessCookie.setPath("/");
+
+        accessCookie.setMaxAge(300);
+
+        response.addCookie(
+                accessCookie
+        );
+
+
+        // =====================================================
+        // REFRESH TOKEN
+        // =====================================================
+
+        if (token.getRefresh_token() != null &&
+                !token.getRefresh_token().isBlank()) {
+
+            Cookie refreshCookie =
+                    new Cookie(
+                            "refreshToken",
+                            token.getRefresh_token()
+                    );
+
+            refreshCookie.setHttpOnly(true);
+
+            refreshCookie.setSecure(false);
+
+            refreshCookie.setPath("/");
+
+            refreshCookie.setMaxAge(
+                    7 * 24 * 60 * 60
+            );
+
+            response.addCookie(
+                    refreshCookie
+            );
         }
     }
 }

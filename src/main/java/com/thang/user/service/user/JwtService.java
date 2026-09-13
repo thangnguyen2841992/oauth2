@@ -129,4 +129,59 @@ public class JwtService {
 
         return claims.get("type", String.class);
     }
+
+    public String generateGoogleSetupToken(
+            String email,
+            String googleId,
+            String firstName,
+            String lastName
+    ) {
+
+        return Jwts.builder()
+
+                .claim("email", email)
+
+                .claim("googleId", googleId)
+
+                .claim("firstName", firstName)
+
+                .claim("lastName", lastName)
+
+                .claim("type", "google_setup")
+
+                .issuedAt(new Date())
+
+                // setup token chỉ sống 10 phút
+                .expiration(
+                        new Date(
+                                System.currentTimeMillis()
+                                        + 10 * 60 * 1000
+                        )
+                )
+
+                .signWith(
+                        secretKey,
+                        Jwts.SIG.HS256
+                )
+
+                .compact();
+    }
+    public Claims parseGoogleSetupToken(
+            String token
+    ) {
+
+        Claims claims = parseAndValidate(token);
+
+        String type =
+                claims.get("type", String.class);
+
+        if (!"google_setup".equals(type)) {
+
+            throw new RuntimeException(
+                    "Invalid Google setup token"
+            );
+        }
+
+        return claims;
+    }
 }

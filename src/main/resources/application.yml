@@ -53,6 +53,11 @@ jwt:
   access-expiration: 300000
   refresh-expiration: 2592000000
 
+google:
+  client-id: 243434037577-d3hf8i7nijo996g3ate2pibmsli3bhff.apps.googleusercontent.com
+  client-secret: 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
+  redirect-uri: http://localhost:8082/api/auth/callbackGoogle
+
 api:
   key: thangdeptrai
 
