@@ -37,4 +37,6 @@ public interface IUserService {
     void logoutAllSessions(String userId);
 
     void forceLogoutUser(String userId, String sessionId);
-    String checkEmailWhenLogin(String email);}
+    String checkEmailWhenLogin(String email);
+    String extractSessionId(String accessToken);
+}

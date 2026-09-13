@@ -37,11 +37,9 @@ public class TokenService {
                 .build();
     }
 
-    public TokenUserResponse refreshToken(
-            String refreshToken
-    ) {
+    public TokenUserResponse refreshToken(String refreshToken) {
 
-        // 1. Verify refresh token
+        // 1. Kiểm tra refresh token
         var claims = jwtService.parseAndValidate(refreshToken);
 
         // 2. Phải là refresh token
@@ -58,7 +56,7 @@ public class TokenService {
             throw new RuntimeException("Invalid refresh token");
         }
 
-        // 4. Lấy sessionId trong refresh token
+        // 4. Lấy sessionId
         String sessionId =
                 claims.get("sessionId", String.class);
 
@@ -66,7 +64,7 @@ public class TokenService {
             throw new RuntimeException("Invalid session");
         }
 
-        // 5. Kiểm tra Redis
+        // 5. Kiểm tra session Redis
         boolean validSession =
                 sessionService.isValidSession(
                         userId,
@@ -79,10 +77,18 @@ public class TokenService {
             );
         }
 
-        // 6. Lấy user DB
-        User user = userRepository.findByUserId(userId).get();
+        // 6. Lấy user
+        User user = userRepository.findByUserId(userId)
+                .orElseThrow(() ->
+                        new RuntimeException("User not found")
+                );
 
-        // 7. Tạo access token mới
+        // 7. Kiểm tra user còn active
+        if (!user.isActive()) {
+            throw new RuntimeException("User is inactive");
+        }
+
+        // 8. Tạo access token mới
         String newAccessToken =
                 jwtService.generateAccessToken(
                         user,

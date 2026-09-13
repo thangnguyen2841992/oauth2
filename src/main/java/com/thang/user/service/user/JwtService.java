@@ -5,7 +5,6 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
-import lombok.Getter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -20,91 +19,114 @@ public class JwtService {
     private final long accessExpiration;
     private final long refreshExpiration;
 
-    public JwtService(
-            @Value("${jwt.secret}") String secret,
-            @Value("${jwt.access-expiration}") long accessExpiration,
-            @Value("${jwt.refresh-expiration}") long refreshExpiration
-    ) {
+    public JwtService(@Value("${jwt.secret}") String secret, @Value("${jwt.access-expiration}") long accessExpiration, @Value("${jwt.refresh-expiration}") long refreshExpiration) {
 
-        this.secretKey = Keys.hmacShaKeyFor(
-                Decoders.BASE64.decode(secret)
-        );
+        this.secretKey = Keys.hmacShaKeyFor(Decoders.BASE64.decode(secret));
 
         this.accessExpiration = accessExpiration;
         this.refreshExpiration = refreshExpiration;
     }
 
-    public String generateAccessToken(
-            User user,
-            String sessionId
-    ) {
+    /**
+     * Generate Access Token.
+     */
+    public String generateAccessToken(User user, String sessionId) {
 
-        return Jwts.builder()
-                .subject(user.getUserId())
+        return Jwts.builder().subject(user.getUserId())
+
                 .claim("email", user.getEmail())
-                .claim(
-                        "name",
-                        user.getFirstName() + " " + user.getLastName()
-                )
-                .claim(
-                        "roles",
-                        List.of(user.getRoleName())
-                )
+
+                .claim("name", user.getFirstName() + " " + user.getLastName())
+
+                .claim("roles", List.of(user.getRoleName()))
+
                 .claim("sessionId", sessionId)
+
                 .claim("type", "access")
+
                 .issuedAt(new Date())
-                .expiration(
-                        new Date(
-                                System.currentTimeMillis()
-                                        + accessExpiration
-                        )
-                )
-                .signWith(secretKey)
+
+                .expiration(new Date(System.currentTimeMillis() + accessExpiration))
+
+                .signWith(secretKey, Jwts.SIG.HS256)
+
                 .compact();
     }
 
-    public String generateRefreshToken(
-            User user,
-            String sessionId
-    ) {
+    /**
+     * Generate Refresh Token.
+     */
+    public String generateRefreshToken(User user, String sessionId) {
 
-        return Jwts.builder()
-                .subject(user.getUserId())
+        return Jwts.builder().subject(user.getUserId())
+
                 .claim("sessionId", sessionId)
+
                 .claim("type", "refresh")
+
                 .issuedAt(new Date())
-                .expiration(
-                        new Date(
-                                System.currentTimeMillis()
-                                        + refreshExpiration
-                        )
-                )
-                .signWith(secretKey)
+
+                .expiration(new Date(System.currentTimeMillis() + refreshExpiration))
+
+                .signWith(secretKey, Jwts.SIG.HS256)
+
                 .compact();
     }
 
+    /**
+     * Parse và validate JWT.
+     * <p>
+     * Kiểm tra:
+     * - JWT có hợp lệ không
+     * - Signature
+     * - Expiration
+     */
     public Claims parseAndValidate(String token) {
 
         if (token == null || token.isBlank()) {
-            throw new RuntimeException(
-                    "JWT không được để trống"
-            );
+
+            throw new RuntimeException("JWT không được để trống");
         }
 
         try {
 
-            return Jwts.parser()
-                    .verifyWith(secretKey)
-                    .build()
-                    .parseSignedClaims(token)
-                    .getPayload();
+            return Jwts.parser().verifyWith(secretKey).build().parseSignedClaims(token).getPayload();
 
         } catch (Exception e) {
 
-            throw new RuntimeException(
-                    "JWT không hợp lệ hoặc đã hết hạn",
-                    e
-            );
+            throw new RuntimeException("JWT không hợp lệ hoặc đã hết hạn", e);
         }
+    }
+
+    /**
+     * Lấy userId từ JWT.
+     */
+    public String getUserId(String token) {
+
+        Claims claims = parseAndValidate(token);
+
+        return claims.getSubject();
+    }
+
+    /**
+     * Lấy sessionId từ JWT.
+     */
+    public String getSessionId(String token) {
+
+        Claims claims = parseAndValidate(token);
+
+        return claims.get("sessionId", String.class);
+    }
+
+    /**
+     * Lấy type của JWT.
+     * <p>
+     * access / refresh
+     */
+    public String getTokenType(String token) {
+
+        Claims claims = parseAndValidate(token);
+
+        return claims.get("type", String.class);
     }
 }

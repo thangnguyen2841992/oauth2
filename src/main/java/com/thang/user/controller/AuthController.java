@@ -7,6 +7,7 @@ import com.thang.user.service.user.SessionService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.NonNull;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -19,6 +20,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
+@Slf4j
 public class AuthController {
 
     private final IUserService userService;
@@ -38,40 +40,20 @@ public class AuthController {
             ResponseCookie accessToken = getResponseCookie(res);
             ResponseCookie refreshToken = getCookie(res);
 
-            return ResponseEntity.ok()
-                    .header(HttpHeaders.SET_COOKIE, accessToken.toString())
-                    .header(HttpHeaders.SET_COOKIE, refreshToken.toString())
-                    .body(Map.of(
-                            "message", "Login success"
-                    ));
+            return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, accessToken.toString()).header(HttpHeaders.SET_COOKIE, refreshToken.toString()).body(Map.of("message", "Login success"));
 
         } catch (RuntimeException e) {
 
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of(
-                            "message", e.getMessage()
-                    ));
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", e.getMessage()));
         }
     }
 
     private static @NonNull ResponseCookie getCookie(TokenUserResponse res) {
-        return ResponseCookie.from("refreshToken", res.getRefresh_token())
-                .httpOnly(true)
-                .path("/")
-                .maxAge(30 * 60)
-                .sameSite("Lax")
-                .secure(false)
-                .build();
+        return ResponseCookie.from("refreshToken", res.getRefresh_token()).httpOnly(true).path("/").maxAge(30 * 60).sameSite("Lax").secure(false).build();
     }
 
     private static @NonNull ResponseCookie getResponseCookie(TokenUserResponse res) {
-        return ResponseCookie.from("accessToken", res.getAccess_token())
-                .httpOnly(true)
-                .path("/")
-                .maxAge(5 * 60)
-                .sameSite("Lax")
-                .secure(false)
-                .build();
+        return ResponseCookie.from("accessToken", res.getAccess_token()).httpOnly(true).path("/").maxAge(5 * 60).sameSite("Lax").secure(false).build();
     }
 
     @PostMapping("/register")
@@ -80,13 +62,7 @@ public class AuthController {
         try {
             User saveUser = userService.createUser(request);
 
-            return ResponseEntity.ok(
-                    Map.of(
-                            "email", saveUser.getEmail(),
-                            "userId", saveUser.getUserId(),
-                            "message", "Đăng ký thành công. Vui lòng kiểm tra email để kích hoạt tài khoản."
-                    )
-            );
+            return ResponseEntity.ok(Map.of("email", saveUser.getEmail(), "userId", saveUser.getUserId(), "message", "Đăng ký thành công. Vui lòng kiểm tra email để kích hoạt tài khoản."));
 
         } catch (Exception e) {
             return ResponseEntity.status(400).body("Đăng ký thất bại!");
@@ -107,84 +83,51 @@ public class AuthController {
             try {
                 UserDTO userDTO = userService.extractUsername(token);
 
-                return ResponseEntity.ok(
-                        Map.of(
-                                "isLoggedIn", true,
-                                "name", userDTO.getFullName(),
-                                "email", userDTO.getEmail(),
-                                "role", userDTO.getRoleName()
-                        )
-                );
+                return ResponseEntity.ok(Map.of("isLoggedIn", true, "name", userDTO.getFullName(), "email", userDTO.getEmail(), "role", userDTO.getRoleName()));
             } catch (Exception e) {
-                return ResponseEntity.ok(
-                        Map.of("isLoggedIn", false)
-                );
+                return ResponseEntity.ok(Map.of("isLoggedIn", false));
             }
         }
-        return ResponseEntity.ok(
-                Map.of("isLoggedIn", false)
-        );
+        return ResponseEntity.ok(Map.of("isLoggedIn", false));
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<?> logout(@RequestBody LogoutRequest logoutRequest, @CookieValue(
-            value = "accessToken",
-            required = false
-    ) String accessTokenReq) {
-        User userEntity = new User();
-        if (accessTokenReq != null) {
+    public ResponseEntity<?> logout(@CookieValue(value = "accessToken", required = false) String accessToken) {
 
-            UserDTO user =
-                    userService.extractUsername(
-                            accessTokenReq
-                    );
+        if (accessToken != null && !accessToken.isBlank()) {
 
-            if (user != null) {
-                userEntity =
-                        this.userService.findUserByEmail(
-                                user.getEmail()
-                        );
+            try {
 
-                String userId =
-                        userEntity.getUserId();
+                UserDTO user = userService.extractUsername(accessToken);
 
-                String currentSession =
-                        sessionService.getSession(
-                                userId
-                        );
+                if (user != null) {
 
-                if (
-                        currentSession != null &&
-                                currentSession.equals(
-                                        logoutRequest.getSessionId()
-                                )
-                ) {
+                    User userEntity = userService.findUserByEmail(user.getEmail());
 
-                    sessionService.removeSession(
-                            userId
-                    );
+                    if (userEntity != null) {
+
+                        String userId = userEntity.getUserId();
+
+                        // Xóa session Redis
+                        sessionService.removeSession(userId);
+                    }
                 }
+
+            } catch (Exception e) {
+
+                log.warn("Logout failed: {}", e.getMessage());
             }
         }
 
-        ResponseCookie accessToken = ResponseCookie.from("accessToken", "")
-                .httpOnly(true)
-                .path("/")
-                .maxAge(0)
-                .build();
+        // Xóa access token
+        ResponseCookie accessTokenCookie = ResponseCookie.from("accessToken", "").httpOnly(true).path("/").maxAge(0).build();
 
-        ResponseCookie refreshToken = ResponseCookie.from("refreshToken", "")
-                .httpOnly(true)
-                .path("/")
-                .maxAge(0)
-                .build();
-        this.userService.logoutAllSessions(userEntity.getEmail());
+        // Xóa refresh token
+        ResponseCookie refreshTokenCookie = ResponseCookie.from("refreshToken", "").httpOnly(true).path("/").maxAge(0).build();
 
-        return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, accessToken.toString())
-                .header(HttpHeaders.SET_COOKIE, refreshToken.toString())
-                .body(Map.of("message", "logged out"));
+        return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, accessTokenCookie.toString()).header(HttpHeaders.SET_COOKIE, refreshTokenCookie.toString()).body(Map.of("message", "logged out"));
     }
+
 
 //    @GetMapping("/callbackGoogle")
 //    public void callback(
@@ -225,32 +168,32 @@ public class AuthController {
     public ResponseEntity<?> checkEmail(@RequestParam String email) {
         String result = userService.checkEmailWhenLogin(email);
 
-        return ResponseEntity.ok(Map.of(
-                "type", result
-        ));
+        return ResponseEntity.ok(Map.of("type", result));
     }
 
     @PostMapping("/refresh")
     public ResponseEntity<?> refresh(@CookieValue(value = "refreshToken", required = false) String refreshToken) {
 
-        if (refreshToken == null) {
-            return ResponseEntity.status(401).body(Map.of("message", "No refresh token"));
+        if (refreshToken == null || refreshToken.isBlank()) {
+
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "No refresh token"));
         }
 
         try {
+
             TokenUserResponse res = userService.refresh(refreshToken);
 
             ResponseCookie accessToken = getResponseCookie(res);
 
             ResponseCookie newRefreshToken = getCookie(res);
 
-            return ResponseEntity.ok()
-                    .header(HttpHeaders.SET_COOKIE, accessToken.toString())
-                    .header(HttpHeaders.SET_COOKIE, newRefreshToken.toString())
-                    .body(Map.of("message", "refreshed"));
+            return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, accessToken.toString()).header(HttpHeaders.SET_COOKIE, newRefreshToken.toString()).body(Map.of("message", "refreshed"));
 
         } catch (Exception e) {
-            return ResponseEntity.status(401).body(Map.of("message", "Refresh token expired"));
+
+            log.warn("Refresh token failed: {}", e.getMessage());
+
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Invalid or expired refresh token"));
         }
     }
 }

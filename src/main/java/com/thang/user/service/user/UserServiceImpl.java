@@ -299,7 +299,7 @@ public class UserServiceImpl implements IUserService {
         // TẠO SESSION MỚI
         // =====================================================
 
-        String newSessionId = loginRequest.getSessionId();
+        String newSessionId = UUID.randomUUID().toString();
 
         if (newSessionId == null || newSessionId.isBlank()) {
 
@@ -356,19 +356,6 @@ public class UserServiceImpl implements IUserService {
 
             throw new RuntimeException("Refresh token không được để trống");
         }
-
-        /*
-         * TokenService xử lý:
-         *
-         * 1. Verify chữ ký JWT
-         * 2. Verify expiration
-         * 3. Kiểm tra type = refresh
-         * 4. Lấy userId
-         * 5. Lấy sessionId
-         * 6. Kiểm tra session Redis
-         * 7. Tạo access token mới
-         */
-
         return tokenService.refreshToken(refreshToken);
     }
 
@@ -441,19 +428,15 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     public UserDTO extractUsername(String token) {
-
         try {
-
             if (token == null || token.isBlank()) {
 
                 return null;
             }
-
             /*
              * Verify JWT trước khi lấy thông tin.
              */
             Claims claims = jwtService.parseAndValidate(token);
-
             UserDTO dto = new UserDTO();
 
             // =================================================
@@ -773,5 +756,17 @@ public class UserServiceImpl implements IUserService {
     private LocalDateTime generateExpiredTime(int minutes) {
 
         return LocalDateTime.now().plusMinutes(minutes);
+    }
+
+
+    @Override
+    public String extractSessionId(String accessToken) {
+
+        Claims claims = jwtService.parseAndValidate(accessToken);
+
+        return claims.get(
+                "sessionId",
+                String.class
+        );
     }
 }

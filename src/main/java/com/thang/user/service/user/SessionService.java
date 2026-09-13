@@ -10,95 +10,65 @@ import java.time.Duration;
 @RequiredArgsConstructor
 public class SessionService {
 
-    private final RedisTemplate<String, String> redisTemplate;
+    private static final String SESSION_KEY_PREFIX = "user:session:";
 
-    private static final String SESSION_KEY_PREFIX =
-            "user:session:";
-
-    // session timeout
     private static final long SESSION_TTL_HOURS = 24;
 
+    private final RedisTemplate<String, String> redisTemplate;
+
     /**
-     * save current session
+     * Lưu session hiện tại của user.
+     * <p>
+     * Mỗi user chỉ có 1 session.
+     * Login lần mới sẽ ghi đè session cũ.
      */
-    public void saveSession(
-            String userId,
-            String sessionId
-    ) {
+    public void saveSession(String userId, String sessionId) {
 
-        redisTemplate.opsForValue().set(
-
-                buildKey(userId),
-
-                sessionId,
-
-                Duration.ofHours(
-                        SESSION_TTL_HOURS
-                )
-        );
+        redisTemplate.opsForValue().set(buildKey(userId), sessionId, Duration.ofHours(SESSION_TTL_HOURS));
     }
 
     /**
-     * get current session
+     * Lấy session hiện tại của user.
      */
-    public String getSession(
-            String userId
-    ) {
+    public String getSession(String userId) {
 
-        return redisTemplate.opsForValue()
-                .get(buildKey(userId));
+        return redisTemplate.opsForValue().get(buildKey(userId));
     }
 
     /**
-     * remove session
+     * Xóa session của user.
      */
-    public void removeSession(
-            String userId
-    ) {
+    public void removeSession(String userId) {
 
-        redisTemplate.delete(
-                buildKey(userId)
-        );
+        redisTemplate.delete(buildKey(userId));
     }
 
     /**
-     * check session valid
+     * Kiểm tra session có còn hợp lệ hay không.
      */
-    public boolean isValidSession(
-            String userId,
-            String sessionId
-    ) {
+    public boolean isValidSession(String userId, String sessionId) {
 
-        String currentSession =
-                getSession(userId);
+        if (userId == null || sessionId == null) {
+            return false;
+        }
 
-        return currentSession != null &&
-                currentSession.equals(sessionId);
+        String currentSession = getSession(userId);
+
+        return sessionId.equals(currentSession);
     }
 
     /**
-     * refresh ttl
+     * Gia hạn TTL session.
      */
-    public void refreshSession(
-            String userId
-    ) {
+    public void refreshSession(String userId) {
 
-        redisTemplate.expire(
-
-                buildKey(userId),
-
-                Duration.ofHours(
-                        SESSION_TTL_HOURS
-                )
-        );
+        redisTemplate.expire(buildKey(userId), Duration.ofHours(SESSION_TTL_HOURS));
     }
 
     /**
-     * redis key
+     * Redis key.
      */
-    private String buildKey(
-            String userId
-    ) {
+    private String buildKey(String userId) {
 
         return SESSION_KEY_PREFIX + userId;
     }
