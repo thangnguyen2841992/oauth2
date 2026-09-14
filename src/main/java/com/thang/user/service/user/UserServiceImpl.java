@@ -673,13 +673,17 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     public String checkEmailWhenLogin(String email) {
-        User user = userRepository.findByEmail(email).get();
+        Optional<User> userOptional = userRepository.findByEmail(email);
+        if (userOptional.isEmpty()) {
+            throw new RuntimeException("USER_NOT_EXIST");
+        }
+        User user = userOptional.get();
         if (!user.isActive()) {
             throw new RuntimeException("USER_NOT_ACTIVE");
         }
-        if (user.getGoogleId() != null && !user.getGoogleId().isBlank()) {
-            return "GOOGLE";
-        }
+//        if (user.getGoogleId() != null && !user.getGoogleId().isBlank()) {
+//            return "GOOGLE";
+//        }
         return "LOCAL";
     }
 
