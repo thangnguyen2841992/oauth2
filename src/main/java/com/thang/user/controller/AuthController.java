@@ -88,7 +88,7 @@ public class AuthController {
             try {
                 UserDTO userDTO = userService.extractUsername(token);
 
-                return ResponseEntity.ok(Map.of("isLoggedIn", true, "name", userDTO.getFullName(), "email", userDTO.getEmail(), "role", userDTO.getRoleName()));
+                return ResponseEntity.ok(Map.of("isLoggedIn", true, "userId", userDTO.getUserId(), "name", userDTO.getFullName(), "email", userDTO.getEmail(), "role", userDTO.getRoleName()));
             } catch (Exception e) {
                 return ResponseEntity.ok(Map.of("isLoggedIn", false));
             }
@@ -134,7 +134,6 @@ public class AuthController {
     }
 
 
-
     @GetMapping("/checkEmail")
     public ResponseEntity<?> checkEmail(@RequestParam String email) {
         String result = userService.checkEmailWhenLogin(email);
@@ -169,17 +168,9 @@ public class AuthController {
     }
 
     @GetMapping("/google")
-    public void googleLogin(
-            HttpServletResponse response
-    ) throws IOException {
+    public void googleLogin(HttpServletResponse response) throws IOException {
 
-        String googleUrl =
-                "https://accounts.google.com/o/oauth2/v2/auth"
-                        + "?client_id=" + googleClientId
-                        + "&redirect_uri=" + googleRedirectUri
-                        + "&response_type=code"
-                        + "&scope=openid%20email%20profile"
-                        + "&prompt=select_account";
+        String googleUrl = "https://accounts.google.com/o/oauth2/v2/auth" + "?client_id=" + googleClientId + "&redirect_uri=" + googleRedirectUri + "&response_type=code" + "&scope=openid%20email%20profile" + "&prompt=select_account";
 
         response.sendRedirect(googleUrl);
     }
@@ -190,13 +181,9 @@ public class AuthController {
     // =========================================================
 
     @GetMapping("/callbackGoogle")
-    public void callbackGoogle(
-            @RequestParam String code,
-            HttpServletResponse response
-    ) throws IOException {
+    public void callbackGoogle(@RequestParam String code, HttpServletResponse response) throws IOException {
 
-        GoogleLoginResponse result =
-                userService.loginWithGoogle(code);
+        GoogleLoginResponse result = userService.loginWithGoogle(code);
 
 
         // =====================================================
@@ -205,14 +192,9 @@ public class AuthController {
 
         if ("LOGIN".equals(result.getStatus())) {
 
-            setAuthCookies(
-                    response,
-                    result.getToken()
-            );
+            setAuthCookies(response, result.getToken());
 
-            response.sendRedirect(
-                    "http://localhost:5173/"
-            );
+            response.sendRedirect("http://localhost:5173/");
 
             return;
         }
@@ -222,31 +204,17 @@ public class AuthController {
         // USER CHƯA CÓ ACCOUNT
         // =====================================================
 
-        if ("SET_PASSWORD".equals(
-                result.getStatus()
-        )) {
+        if ("SET_PASSWORD".equals(result.getStatus())) {
 
-            String redirect =
-                    "http://localhost:5173/google/setup-password"
-                            + "?token="
-                            + result.getSetupToken()
-                            + "&email="
-                            + java.net.URLEncoder.encode(
-                            result.getEmail(),
-                            java.nio.charset.StandardCharsets.UTF_8
-                    );
+            String redirect = "http://localhost:5173/google/setup-password" + "?token=" + result.getSetupToken() + "&email=" + java.net.URLEncoder.encode(result.getEmail(), java.nio.charset.StandardCharsets.UTF_8);
 
-            response.sendRedirect(
-                    redirect
-            );
+            response.sendRedirect(redirect);
 
             return;
         }
 
 
-        throw new RuntimeException(
-                "Google login status không hợp lệ"
-        );
+        throw new RuntimeException("Google login status không hợp lệ");
     }
 
 
@@ -255,36 +223,18 @@ public class AuthController {
     // =========================================================
 
     @PostMapping("/google/setup-password")
-    public void setupGooglePassword(
-            @RequestBody GoogleSetupPasswordRequest request,
-            HttpServletResponse response
-    ) throws IOException {
+    public void setupGooglePassword(@RequestBody GoogleSetupPasswordRequest request, HttpServletResponse response) throws IOException {
 
-        TokenUserResponse token =
-                userService.setupGooglePassword(
-                        request
-                );
+        TokenUserResponse token = userService.setupGooglePassword(request);
 
-        setAuthCookies(
-                response,
-                token
-        );
+        setAuthCookies(response, token);
 
-        response.setStatus(
-                HttpServletResponse.SC_OK
-        );
+        response.setStatus(HttpServletResponse.SC_OK);
     }
 
-    private void setAuthCookies(
-            HttpServletResponse response,
-            TokenUserResponse token
-    ) {
+    private void setAuthCookies(HttpServletResponse response, TokenUserResponse token) {
 
-        Cookie accessCookie =
-                new Cookie(
-                        "accessToken",
-                        token.getAccess_token()
-                );
+        Cookie accessCookie = new Cookie("accessToken", token.getAccess_token());
 
         accessCookie.setHttpOnly(true);
 
@@ -294,23 +244,16 @@ public class AuthController {
 
         accessCookie.setMaxAge(300);
 
-        response.addCookie(
-                accessCookie
-        );
+        response.addCookie(accessCookie);
 
 
         // =====================================================
         // REFRESH TOKEN
         // =====================================================
 
-        if (token.getRefresh_token() != null &&
-                !token.getRefresh_token().isBlank()) {
+        if (token.getRefresh_token() != null && !token.getRefresh_token().isBlank()) {
 
-            Cookie refreshCookie =
-                    new Cookie(
-                            "refreshToken",
-                            token.getRefresh_token()
-                    );
+            Cookie refreshCookie = new Cookie("refreshToken", token.getRefresh_token());
 
             refreshCookie.setHttpOnly(true);
 
@@ -318,13 +261,9 @@ public class AuthController {
 
             refreshCookie.setPath("/");
 
-            refreshCookie.setMaxAge(
-                    7 * 24 * 60 * 60
-            );
+            refreshCookie.setMaxAge(7 * 24 * 60 * 60);
 
-            response.addCookie(
-                    refreshCookie
-            );
+            response.addCookie(refreshCookie);
         }
     }
 }
