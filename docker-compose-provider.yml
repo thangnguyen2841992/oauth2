@@ -19,11 +19,3 @@ services:
       - ./themes:/opt/keycloak/themes
 
 
-#    docker compose -f .\docker-compose-provider.yml up -d
-
-#  docker run --name redis -p 6379:6379 -d redis
-
-#  docker exec -it redis redis-cli
-
-#  KEYS *
-#  docker compose -f docker-compose-provider.yml logs -f keycloak
