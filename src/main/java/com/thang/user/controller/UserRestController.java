@@ -36,7 +36,7 @@ public class UserRestController {
         return new ResponseEntity<>(userService.getAllUsers(), HttpStatus.OK);
     }
 
-    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF', 'USER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF') or (hasRole('USER') and #email == authentication.token.claims['email'])")
     @GetMapping("/findUserByEmail")
     public ResponseEntity<UserDTO> findUserByEmail(@RequestParam String email) {
         return new ResponseEntity<>(userService.findUserByEmailDTO(email), HttpStatus.OK);

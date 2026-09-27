@@ -28,12 +28,15 @@ public class AuthController {
 
     private final IUserService userService;
     private final SessionService sessionService;
+    private final com.thang.user.service.user.JwtService jwtService;
 
     @Value("${google.client-id}")
     private String googleClientId;
 
     @Value("${google.redirect-uri}")
     private String googleRedirectUri;
+    @Value("${FRONTEND_URL:http://localhost:5173}") private String frontendUrl;
+    @Value("${COOKIE_SECURE:false}") private boolean cookieSecure;
 
 
     @PostMapping("/login")
@@ -47,19 +50,24 @@ public class AuthController {
 
             return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, accessToken.toString()).header(HttpHeaders.SET_COOKIE, refreshToken.toString()).body(Map.of("message", "Login success"));
 
+        } catch (org.springframework.dao.DataAccessException e) {
+            log.warn("Login storage unavailable: {}", e.getClass().getSimpleName());
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(Map.of("message", "Dịch vụ đăng nhập tạm thời gián đoạn. Vui lòng thử lại."));
         } catch (RuntimeException e) {
 
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", e.getMessage()));
         }
     }
 
-    private static @NonNull ResponseCookie getCookie(TokenUserResponse res) {
-        return ResponseCookie.from("refreshToken", res.getRefresh_token()).httpOnly(true).path("/").maxAge(30 * 60).sameSite("Lax").secure(false).build();
+    private @NonNull ResponseCookie getCookie(TokenUserResponse res) {
+        return ResponseCookie.from("refreshToken", res.getRefresh_token()).httpOnly(true).path("/").maxAge(remaining(res.getRefreshExpiresAt())).sameSite("Lax").secure(cookieSecure).build();
     }
 
-    private static @NonNull ResponseCookie getResponseCookie(TokenUserResponse res) {
-        return ResponseCookie.from("accessToken", res.getAccess_token()).httpOnly(true).path("/").maxAge(5 * 60).sameSite("Lax").secure(false).build();
+    private @NonNull ResponseCookie getResponseCookie(TokenUserResponse res) {
+        return ResponseCookie.from("accessToken", res.getAccess_token()).httpOnly(true).path("/").maxAge(remaining(res.getAccessExpiresAt())).sameSite("Lax").secure(cookieSecure).build();
     }
+    private long remaining(long expiresAt) { return Math.max(0, (expiresAt - System.currentTimeMillis()) / 1000); }
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody CreateUserRequest request) {
@@ -75,65 +83,60 @@ public class AuthController {
     }
 
     @GetMapping("/checkLogin")
-    public ResponseEntity<?> checkLogin(HttpServletRequest request) {
-        String token = null;
-        if (request.getCookies() != null) {
-            for (Cookie cookie : request.getCookies()) {
-                if ("accessToken".equals(cookie.getName())) {
-                    token = cookie.getValue();
-                }
-            }
+    public ResponseEntity<?> checkLogin(@CookieValue(value = "accessToken", required = false) String token) {
+        try {
+            var claims = activeClaims(token, false);
+            UserDTO user = userService.extractUsername(token);
+            if (user == null) return ResponseEntity.status(401).body(Map.of("isLoggedIn", false));
+            return ResponseEntity.ok(Map.of("isLoggedIn", true, "userId", user.getUserId(), "name", user.getFullName(),
+                "email", user.getEmail(), "role", user.getRoleName(), "sessionId", claims.get("sessionId", String.class)));
+        } catch (org.springframework.dao.DataAccessException e) {
+            return ResponseEntity.status(503).body(Map.of("message", "Dịch vụ đăng nhập tạm thời gián đoạn"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(401).body(Map.of("isLoggedIn", false));
         }
-        if (token != null) {
-            try {
-                UserDTO userDTO = userService.extractUsername(token);
+    }
 
-                return ResponseEntity.ok(Map.of("isLoggedIn", true, "userId", userDTO.getUserId(), "name", userDTO.getFullName(), "email", userDTO.getEmail(), "role", userDTO.getRoleName()));
-            } catch (Exception e) {
-                return ResponseEntity.ok(Map.of("isLoggedIn", false));
-            }
+    @PostMapping("/activity")
+    public ResponseEntity<?> activity(@CookieValue(value = "accessToken", required = false) String token) {
+        try {
+            activeClaims(token, true);
+            return ResponseEntity.noContent().build();
+        } catch (org.springframework.dao.DataAccessException e) {
+            return ResponseEntity.status(503).body(Map.of("message", "Dịch vụ đăng nhập tạm thời gián đoạn"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(401).body(Map.of("message", "Phiên đăng nhập đã hết hạn"));
         }
-        return ResponseEntity.ok(Map.of("isLoggedIn", false));
+    }
+
+    private io.jsonwebtoken.Claims activeClaims(String token, boolean activity) {
+        var claims = jwtService.parseAndValidate(token);
+        if (!"access".equals(claims.get("type", String.class)) ||
+            sessionService.deadline(claims.getSubject(), claims.get("sessionId", String.class), activity) == null) {
+            throw new IllegalArgumentException("Session expired");
+        }
+        return claims;
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<?> logout(@CookieValue(value = "accessToken", required = false) String accessToken) {
-
-        if (accessToken != null && !accessToken.isBlank()) {
-
-            try {
-
-                UserDTO user = userService.extractUsername(accessToken);
-
-                if (user != null) {
-
-                    User userEntity = userService.findUserByEmail(user.getEmail());
-
-                    if (userEntity != null) {
-
-                        String userId = userEntity.getUserId();
-
-                        // Xóa session Redis
-                        sessionService.removeSession(userId);
-                    }
-                }
-
-            } catch (Exception e) {
-
-                log.warn("Logout failed: {}", e.getMessage());
+    public ResponseEntity<?> logout(@CookieValue(value = "refreshToken", required = false) String refreshToken,
+                                   @CookieValue(value = "accessToken", required = false) String accessToken) {
+        try {
+            String token = refreshToken != null && !refreshToken.isBlank() ? refreshToken : accessToken;
+            if (token != null && !token.isBlank()) {
+                var claims = jwtService.parseAndValidate(token);
+                String type = claims.get("type", String.class);
+                if ("access".equals(type) || "refresh".equals(type))
+                    sessionService.removeSession(claims.getSubject(), claims.get("sessionId", String.class));
             }
-        }
-
-        // Xóa access token
-        ResponseCookie accessTokenCookie = ResponseCookie.from("accessToken", "").httpOnly(true).path("/").maxAge(0).build();
-
-        // Xóa refresh token
-        ResponseCookie refreshTokenCookie = ResponseCookie.from("refreshToken", "").httpOnly(true).path("/").maxAge(0).build();
-
-        return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, accessTokenCookie.toString()).header(HttpHeaders.SET_COOKIE, refreshTokenCookie.toString()).body(Map.of("message", "logged out"));
+        } catch (org.springframework.dao.DataAccessException e) {
+            return ResponseEntity.status(503).body(Map.of("message", "Chưa thể thu hồi phiên. Vui lòng thử đăng xuất lại."));
+        } catch (RuntimeException e) { /* Already expired or invalid: clear browser cookies. */ }
+        return ResponseEntity.ok()
+            .header(HttpHeaders.SET_COOKIE, ResponseCookie.from("accessToken", "").httpOnly(true).secure(cookieSecure).sameSite("Lax").path("/").maxAge(0).build().toString())
+            .header(HttpHeaders.SET_COOKIE, ResponseCookie.from("refreshToken", "").httpOnly(true).secure(cookieSecure).sameSite("Lax").path("/").maxAge(0).build().toString())
+            .body(Map.of("message", "logged out"));
     }
-
-
     @GetMapping("/checkEmail")
     public ResponseEntity<?> checkEmail(@RequestParam String email) {
         String result = userService.checkEmailWhenLogin(email);
@@ -161,6 +164,11 @@ public class AuthController {
 
         } catch (Exception e) {
 
+            if (e instanceof org.springframework.dao.DataAccessException) {
+                log.warn("Refresh storage unavailable: {}", e.getClass().getSimpleName());
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                        .body(Map.of("message", "Dịch vụ đăng nhập tạm thời gián đoạn. Vui lòng thử lại."));
+            }
             log.warn("Refresh token failed: {}", e.getMessage());
 
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Invalid or expired refresh token"));
@@ -194,7 +202,7 @@ public class AuthController {
 
             setAuthCookies(response, result.getToken());
 
-            response.sendRedirect("http://localhost:5173/");
+            response.sendRedirect(frontendUrl + "/");
 
             return;
         }
@@ -206,7 +214,7 @@ public class AuthController {
 
         if ("SET_PASSWORD".equals(result.getStatus())) {
 
-            String redirect = "http://localhost:5173/google/setup-password" + "?token=" + result.getSetupToken() + "&email=" + java.net.URLEncoder.encode(result.getEmail(), java.nio.charset.StandardCharsets.UTF_8);
+            String redirect = frontendUrl + "/google/setup-password" + "?token=" + result.getSetupToken() + "&email=" + java.net.URLEncoder.encode(result.getEmail(), java.nio.charset.StandardCharsets.UTF_8);
 
             response.sendRedirect(redirect);
 
@@ -233,37 +241,7 @@ public class AuthController {
     }
 
     private void setAuthCookies(HttpServletResponse response, TokenUserResponse token) {
-
-        Cookie accessCookie = new Cookie("accessToken", token.getAccess_token());
-
-        accessCookie.setHttpOnly(true);
-
-        accessCookie.setSecure(false);
-
-        accessCookie.setPath("/");
-
-        accessCookie.setMaxAge(300);
-
-        response.addCookie(accessCookie);
-
-
-        // =====================================================
-        // REFRESH TOKEN
-        // =====================================================
-
-        if (token.getRefresh_token() != null && !token.getRefresh_token().isBlank()) {
-
-            Cookie refreshCookie = new Cookie("refreshToken", token.getRefresh_token());
-
-            refreshCookie.setHttpOnly(true);
-
-            refreshCookie.setSecure(false);
-
-            refreshCookie.setPath("/");
-
-            refreshCookie.setMaxAge(7 * 24 * 60 * 60);
-
-            response.addCookie(refreshCookie);
-        }
+        response.addHeader(HttpHeaders.SET_COOKIE, getResponseCookie(token).toString());
+        response.addHeader(HttpHeaders.SET_COOKIE, getCookie(token).toString());
     }
 }

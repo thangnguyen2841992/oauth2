@@ -16,17 +16,17 @@ public interface IUserService {
     UserDTO findUserByEmailDTO(String email);
 
 
-    UserDTO updateUser(Long id, UserDTO dto);
+    UserDTO updateUser(String id, UserDTO dto);
 
     void deleteUser(String userId);
 
     String activeUser(String userId, String activeCode);
 
-    String resendActiveCode(long userId);
+    String resendActiveCode(String userId);
 
     UserDTO extractUsername(String token);
 
-    String updatePassword(CreateUserRequest request);
+
 
     TokenUserResponse login(LoginRequest loginRequest);
 

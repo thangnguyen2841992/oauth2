@@ -18,6 +18,10 @@ public class JwtService {
     private final SecretKey secretKey;
     private final long accessExpiration;
     private final long refreshExpiration;
+    @Value("${jwt.admin-refresh-expiration:28800000}") private long adminRefreshExpiration = 28800000;
+    public long sessionDuration(User user) {
+        return "ADMIN".equals(user.getRoleName()) ? adminRefreshExpiration : refreshExpiration;
+    }
 
     public JwtService(@Value("${jwt.secret}") String secret, @Value("${jwt.access-expiration}") long accessExpiration, @Value("${jwt.refresh-expiration}") long refreshExpiration) {
 
@@ -31,6 +35,9 @@ public class JwtService {
      * Generate Access Token.
      */
     public String generateAccessToken(User user, String sessionId) {
+        return generateAccessToken(user, sessionId, System.currentTimeMillis() + accessExpiration);
+    }
+    public String generateAccessToken(User user, String sessionId, long deadline) {
 
         return Jwts.builder().subject(user.getUserId())
 
@@ -46,7 +53,7 @@ public class JwtService {
 
                 .issuedAt(new Date())
 
-                .expiration(new Date(System.currentTimeMillis() + accessExpiration))
+                .expiration(new Date(Math.min(deadline, System.currentTimeMillis() + accessExpiration)))
 
                 .signWith(secretKey, Jwts.SIG.HS256)
 
@@ -57,16 +64,20 @@ public class JwtService {
      * Generate Refresh Token.
      */
     public String generateRefreshToken(User user, String sessionId) {
+        return generateRefreshToken(user, sessionId, System.currentTimeMillis() + sessionDuration(user));
+    }
+    public String generateRefreshToken(User user, String sessionId, long deadline) {
 
         return Jwts.builder().subject(user.getUserId())
 
                 .claim("sessionId", sessionId)
 
                 .claim("type", "refresh")
+                .id(java.util.UUID.randomUUID().toString())
 
                 .issuedAt(new Date())
 
-                .expiration(new Date(System.currentTimeMillis() + refreshExpiration))
+                .expiration(new Date(deadline))
 
                 .signWith(secretKey, Jwts.SIG.HS256)
 

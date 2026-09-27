@@ -4,6 +4,8 @@ import com.nihongo.security.CommonSecurityConfig;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
+import org.redisson.config.SingleServerConfig;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
@@ -23,11 +25,24 @@ public class UserServiceApplication {
         SpringApplication.run(UserServiceApplication.class, args);
     }
 
-    @Bean
-    public RedissonClient redissonClient() {
+    @Bean(destroyMethod = "shutdown")
+    public RedissonClient redissonClient(
+            @Value("${spring.data.redis.host:localhost}") String host,
+            @Value("${spring.data.redis.port:6379}") int port,
+            @Value("${spring.data.redis.username:}") String username,
+            @Value("${spring.data.redis.password:}") String password,
+            @Value("${spring.data.redis.database:0}") int database,
+            @Value("${spring.data.redis.ssl.enabled:false}") boolean ssl) {
         Config config = new Config();
-        config.useSingleServer()
-                .setAddress("redis://180.93.115.154:6379");
+        SingleServerConfig server = config.useSingleServer()
+                .setAddress((ssl ? "rediss://" : "redis://") + host + ":" + port)
+                .setDatabase(database);
+        if (!username.isBlank()) {
+            server.setUsername(username);
+        }
+        if (!password.isEmpty()) {
+            server.setPassword(password);
+        }
 
         return Redisson.create(config);
     }

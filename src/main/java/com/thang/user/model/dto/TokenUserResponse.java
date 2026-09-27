@@ -11,4 +11,6 @@ public class TokenUserResponse {
 
     private String access_token;
     private String refresh_token;
+    private long accessExpiresAt;
+    private long refreshExpiresAt;
 }

@@ -1,83 +1,17 @@
 package com.thang.user.controller;
-
-import com.thang.user.model.dto.CreateUserRequest;
-import com.thang.user.service.user.IUserService;
-import org.springframework.http.ResponseEntity;
+import com.thang.user.service.user.PasswordSetupService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
-
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
-@RestController
-@RequestMapping("/api/active-user")
+@RestController @RequestMapping("/api/active-user") @RequiredArgsConstructor
 public class AuthViewController {
-
-    private final IUserService userService;
-    private final Map<Long, Long> resendCache = new ConcurrentHashMap<>();
-
-
-    public AuthViewController(IUserService userService) {
-        this.userService = userService;
-    }
-
+    private final PasswordSetupService passwords;
     @GetMapping("/active")
-    public ResponseEntity<?> activeAccount(@RequestParam String userId,
-                                           @RequestParam String activeCode,
-                                           @RequestParam String email) {
-
-        String result = userService.activeUser(userId, activeCode);
-
-        return switch (result) {
-            case "SUCCESS" -> ResponseEntity.ok(
-                    Map.of(
-                            "status", "SUCCESS",
-                            "redirect", "/reset-password",
-                            "email", email
-                    )
-            );
-
-            case "EXPIRED" -> ResponseEntity.ok(
-                    Map.of("status", "EXPIRED", "userId", userId)
-            );
-
-            case "INVALID" -> ResponseEntity.ok(
-                    Map.of("status", "INVALID")
-            );
-
-            case "ALREADY_ACTIVE" -> ResponseEntity.ok(
-                    Map.of("status", "ALREADY_ACTIVE")
-            );
-
-            default -> ResponseEntity.status(500).build();
-        };
+    public Map<String,String> activeAccount(@RequestParam String userId, @RequestParam String activeCode) {
+        return passwords.activate(userId, activeCode);
     }
-
     @PostMapping("/updatePassword")
-    public ResponseEntity<?> updatePassword(@RequestBody CreateUserRequest request) {
-
-        String result = this.userService.updatePassword(request);
-
-        if (result.equals("SUCCESS")) {
-            return ResponseEntity.ok(Map.of("status", "SUCCESS"));
-        }
-
-        return ResponseEntity.badRequest().body("Update failed");
+    public Map<String,String> updatePassword(@RequestBody PasswordSetupService.SetupRequest request) {
+        passwords.reset(request); return Map.of("status","SUCCESS");
     }
-
-//    @PostMapping("/resend-active")
-//    public ResponseEntity<?> resendActive(@RequestBody ResendActiveRequest request) {
-//
-//        if (request.getUserId() == null) {
-//            return ResponseEntity.badRequest().body("Missing userId");
-//        }
-//
-//        String result = userService.resendActiveCode(request.getUserId());
-//
-//        return ResponseEntity.ok(
-//                Map.of(
-//                        "status", "SUCCESS",
-//                        "message", "Đã gửi lại email"
-//                )
-//        );
-//    }
 }

@@ -198,7 +198,7 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     @Transactional
-    public UserDTO updateUser(Long id, UserDTO dto) {
+    public UserDTO updateUser(String id, UserDTO dto) {
 
         if (dto == null) {
             return null;
@@ -323,7 +323,7 @@ public class UserServiceImpl implements IUserService {
         // SAVE SESSION MỚI
         // =====================================================
 
-        sessionService.saveSession(user.getUserId(), newSessionId);
+
 
         // =====================================================
         // UPDATE LAST LOGIN
@@ -360,55 +360,6 @@ public class UserServiceImpl implements IUserService {
     // =========================================================
     // UPDATE PASSWORD
     // =========================================================
-
-    @Override
-    @Transactional
-    public String updatePassword(CreateUserRequest request) {
-
-        if (request == null) {
-            return "INVALID_REQUEST";
-        }
-
-        if (isInvalidPassword(request.getPassword())) {
-
-            return "Password not validation";
-        }
-
-        if (!Objects.equals(request.getPassword(), request.getConfirmPassword())) {
-
-            return "Password not matches";
-        }
-
-        if (request.getEmail() == null || request.getEmail().isBlank()) {
-
-            return "EMAIL_REQUIRED";
-        }
-
-        Optional<User> userOptional = userRepository.findByEmail(request.getEmail());
-
-        if (userOptional.isEmpty()) {
-            return "USER_NOT_FOUND";
-        }
-
-        User user = userOptional.get();
-
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
-
-        user.setDateModified(LocalDateTime.now());
-
-        userRepository.save(user);
-
-        /*
-         * Password thay đổi => invalidate session hiện tại.
-         *
-         * User sẽ phải login lại.
-         */
-        sessionService.removeSession(user.getUserId());
-
-        log.info("Password updated and session invalidated: userId={}", user.getUserId());
-
-        return "SUCCESS";
-    }
 
     // =========================================================
     // PASSWORD VALIDATION
@@ -563,7 +514,7 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     @Transactional
-    public String resendActiveCode(long userId) {
+    public String resendActiveCode(String userId) {
 
         User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("USER_NOT_FOUND"));
 
@@ -1052,7 +1003,7 @@ public class UserServiceImpl implements IUserService {
         // SAVE SESSION
         // =========================================================
 
-        sessionService.saveSession(user.getUserId(), newSessionId);
+
 
 
         // =========================================================

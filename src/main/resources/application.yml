@@ -2,18 +2,22 @@ server:
   port: 8081
 
 spring:
+  config:
+    import: "optional:file:./.local/user.properties,optional:file:../.local/user.properties"
   application:
     name: user-service
 
   data:
     redis:
-      host: 180.93.115.154
-      port: 6379
+      host: ${REDIS_HOST:160.22.107.232}
+      port: ${REDIS_PORT:6379}
+      username: ${REDIS_USERNAME:}
+      password: ${REDIS_PASSWORD}
 
   datasource:
     url: jdbc:mysql://onehost-amdcloudhn022602.000nethost.com:3306/tsezwyvdhosting_nihongo?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
     username: tsezwyvdhosting_nihongo_app
-    password: thuThuy@1
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
     hikari:
@@ -31,7 +35,7 @@ spring:
         dialect: org.hibernate.dialect.MySQLDialect
 
   kafka:
-    bootstrap-servers: 180.93.115.154:9092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:160.22.107.232:9092}
     producer:
       acks: all
       enable-idempotence: true
@@ -46,17 +50,19 @@ eureka:
     register-with-eureka: true
     fetch-registry: true
     service-url:
-      defaultZone: http://localhost:8761/eureka
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka}
 
 jwt:
-  secret: "U7tjRTsx0baZLsRhHGcc0FA/B7MJ65IfQ0jZHvUyYrE="
+  secret: ${JWT_SECRET}
   access-expiration: 300000
-  refresh-expiration: 2592000000
+  refresh-expiration: 604800000
+  admin-refresh-expiration: 28800000
+  admin-idle-timeout: 1800000
 
 google:
   client-id: 243434037577-d3hf8i7nijo996g3ate2pibmsli3bhff.apps.googleusercontent.com
-  client-secret: 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
-  redirect-uri: http://localhost:8082/api/auth/callbackGoogle
+  client-secret: ${GOOGLE_CLIENT_SECRET}
+  redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8082/api/auth/callbackGoogle}
 
 api:
   key: thangdeptrai

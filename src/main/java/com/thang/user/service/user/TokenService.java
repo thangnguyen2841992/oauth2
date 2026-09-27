@@ -9,95 +9,36 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class TokenService {
-
     private final JwtService jwtService;
     private final SessionService sessionService;
     private final IUserRepository userRepository;
 
-    public TokenUserResponse generateToken(
-            User user,
-            String sessionId
-    ) {
-
-        String accessToken =
-                jwtService.generateAccessToken(
-                        user,
-                        sessionId
-                );
-
-        String refreshToken =
-                jwtService.generateRefreshToken(
-                        user,
-                        sessionId
-                );
-
-        return TokenUserResponse.builder()
-                .access_token(accessToken)
-                .refresh_token(refreshToken)
-                .build();
+    public TokenUserResponse generateToken(User user, String sid) {
+        long expires = (System.currentTimeMillis() + jwtService.sessionDuration(user)) / 1000 * 1000;
+        String refresh = jwtService.generateRefreshToken(user, sid, expires);
+        sessionService.create(user.getUserId(), sid, refresh, expires, "ADMIN".equals(user.getRoleName()));
+        return response(user, sid, refresh, expires);
     }
-
-    public TokenUserResponse refreshToken(String refreshToken) {
-
-        // 1. Kiểm tra refresh token
-        var claims = jwtService.parseAndValidate(refreshToken);
-
-        // 2. Phải là refresh token
-        String type = claims.get("type", String.class);
-
-        if (!"refresh".equals(type)) {
-            throw new RuntimeException("Invalid refresh token");
-        }
-
-        // 3. Lấy userId
+    public TokenUserResponse refreshToken(String token) {
+        var claims = jwtService.parseAndValidate(token);
+        if (!"refresh".equals(claims.get("type", String.class))) throw new IllegalArgumentException("Invalid refresh token");
         String userId = claims.getSubject();
-
-        if (userId == null || userId.isBlank()) {
-            throw new RuntimeException("Invalid refresh token");
-        }
-
-        // 4. Lấy sessionId
-        String sessionId =
-                claims.get("sessionId", String.class);
-
-        if (sessionId == null || sessionId.isBlank()) {
-            throw new RuntimeException("Invalid session");
-        }
-
-        // 5. Kiểm tra session Redis
-        boolean validSession =
-                sessionService.isValidSession(
-                        userId,
-                        sessionId
-                );
-
-        if (!validSession) {
-            throw new RuntimeException(
-                    "Session expired or logged out"
-            );
-        }
-
-        // 6. Lấy user
-        User user = userRepository.findByUserId(userId)
-                .orElseThrow(() ->
-                        new RuntimeException("User not found")
-                );
-
-        // 7. Kiểm tra user còn active
-        if (!user.isActive()) {
-            throw new RuntimeException("User is inactive");
-        }
-
-        // 8. Tạo access token mới
-        String newAccessToken =
-                jwtService.generateAccessToken(
-                        user,
-                        sessionId
-                );
-
-        return TokenUserResponse.builder()
-                .access_token(newAccessToken)
-                .refresh_token(refreshToken)
-                .build();
+        String sid = claims.get("sessionId", String.class);
+        if (userId == null || sid == null || !sessionService.isValidSession(userId, sid)) throw new IllegalArgumentException("Session expired or logged out");
+        User user = userRepository.findByUserId(userId).orElseThrow(() -> new IllegalArgumentException("User not found"));
+        if (!user.isActive()) throw new IllegalArgumentException("User is inactive");
+        long expires = claims.getExpiration().getTime();
+        String next = jwtService.generateRefreshToken(user, sid, expires);
+        String rotated = sessionService.rotate(userId, sid, token, next);
+        if (rotated == null) throw new IllegalArgumentException("Refresh token reused or session expired");
+        return response(user, sid, rotated, expires);
+    }
+    private TokenUserResponse response(User user, String sid, String refresh, long expires) {
+        Long deadline = sessionService.deadline(user.getUserId(), sid, false);
+        if (deadline == null) throw new IllegalArgumentException("Session expired");
+        String access = jwtService.generateAccessToken(user, sid, Math.min(deadline, expires));
+        return TokenUserResponse.builder().access_token(access).refresh_token(refresh)
+            .accessExpiresAt(jwtService.parseAndValidate(access).getExpiration().getTime())
+            .refreshExpiresAt(expires).build();
     }
 }

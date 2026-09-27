@@ -32,6 +32,8 @@ public class User {
     private LocalDateTime lastLogin;
     private String roleName;
     private boolean isActive;
+    private String passwordSetupHash;
+    private LocalDateTime passwordSetupExpiresAt;
     private String codeActive;
     private LocalDateTime codeActiveExpiredAt;
 }
