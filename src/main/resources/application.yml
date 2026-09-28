@@ -12,12 +12,12 @@ spring:
       host: ${REDIS_HOST:160.22.107.232}
       port: ${REDIS_PORT:6379}
       username: ${REDIS_USERNAME:}
-      password: ${REDIS_PASSWORD}
+      password: ${REDIS_PASSWORD:thuThuy@123}
 
   datasource:
     url: jdbc:mysql://onehost-amdcloudhn022602.000nethost.com:3306/tsezwyvdhosting_nihongo?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
     username: tsezwyvdhosting_nihongo_app
-    password: ${SPRING_DATASOURCE_PASSWORD}
+    password: thuThuy@1
     driver-class-name: com.mysql.cj.jdbc.Driver
 
     hikari:
@@ -53,7 +53,7 @@ eureka:
       defaultZone: ${EUREKA_URL:http://localhost:8761/eureka}
 
 jwt:
-  secret: ${JWT_SECRET}
+  secret: "U7tjRTsx0baZLsRhHGcc0FA/B7MJ65IfQ0jZHvUyYrE="
   access-expiration: 300000
   refresh-expiration: 604800000
   admin-refresh-expiration: 28800000
@@ -61,7 +61,7 @@ jwt:
 
 google:
   client-id: 243434037577-d3hf8i7nijo996g3ate2pibmsli3bhff.apps.googleusercontent.com
-  client-secret: ${GOOGLE_CLIENT_SECRET}
+  client-secret: ${GOOGLE_CLIENT_SECRET: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}
   redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8082/api/auth/callbackGoogle}
 
 api:
