@@ -34,8 +34,7 @@ public class PasswordSetupService {
     public void reset(SetupRequest request) {
         if (request == null || request.userId() == null || request.token() == null || request.token().length() > 100) throw invalid();
         String password = request.password();
-        if (password == null || password.length() < 8 || password.getBytes(StandardCharsets.UTF_8).length > 72
-            || !password.matches("(?s)(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^a-zA-Z0-9]).*")
+        if (!PasswordPolicy.valid(password)
             || !password.equals(request.confirmPassword())) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Mật khẩu cần 8–72 byte, chữ hoa, chữ thường, số, ký tự đặc biệt và xác nhận trùng khớp");
         var user = users.lockById(request.userId()).orElseThrow(() -> invalid());
         if (user.getPasswordSetupHash() == null || user.getPasswordSetupExpiresAt() == null

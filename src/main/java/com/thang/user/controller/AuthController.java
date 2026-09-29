@@ -4,8 +4,6 @@ import com.thang.user.model.dto.*;
 import com.thang.user.model.entity.User;
 import com.thang.user.service.user.IUserService;
 import com.thang.user.service.user.SessionService;
-import jakarta.servlet.http.Cookie;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +27,7 @@ public class AuthController {
     private final IUserService userService;
     private final SessionService sessionService;
     private final com.thang.user.service.user.JwtService jwtService;
+    private final com.thang.user.service.user.GoogleOAuthState googleOAuthState;
 
     @Value("${google.client-id}")
     private String googleClientId;
@@ -177,10 +176,20 @@ public class AuthController {
 
     @GetMapping("/google")
     public void googleLogin(HttpServletResponse response) throws IOException {
-
-        String googleUrl = "https://accounts.google.com/o/oauth2/v2/auth" + "?client_id=" + googleClientId + "&redirect_uri=" + googleRedirectUri + "&response_type=code" + "&scope=openid%20email%20profile" + "&prompt=select_account";
-
+        String state = googleOAuthState.issue();
+        response.addHeader(HttpHeaders.SET_COOKIE, googleStateCookie(state, 600).toString());
+        String googleUrl = org.springframework.web.util.UriComponentsBuilder
+                .fromUriString("https://accounts.google.com/o/oauth2/v2/auth")
+                .queryParam("client_id", googleClientId).queryParam("redirect_uri", googleRedirectUri)
+                .queryParam("response_type", "code").queryParam("scope", "openid email profile")
+                .queryParam("prompt", "select_account").queryParam("state", state)
+                .build().encode().toUriString();
         response.sendRedirect(googleUrl);
+    }
+
+    private ResponseCookie googleStateCookie(String state, long maxAge) {
+        return ResponseCookie.from("googleOAuthState", state).httpOnly(true).secure(cookieSecure)
+                .sameSite("Lax").path("/api/auth").maxAge(maxAge).build();
     }
 
 
@@ -189,8 +198,12 @@ public class AuthController {
     // =========================================================
 
     @GetMapping("/callbackGoogle")
-    public void callbackGoogle(@RequestParam String code, HttpServletResponse response) throws IOException {
-
+    public void callbackGoogle(@RequestParam String code,
+                               @RequestParam(required = false) String state,
+                               @CookieValue(value = "googleOAuthState", required = false) String expectedState,
+                               HttpServletResponse response) throws IOException {
+        response.addHeader(HttpHeaders.SET_COOKIE, googleStateCookie("", 0).toString());
+        googleOAuthState.verify(state, expectedState);
         GoogleLoginResponse result = userService.loginWithGoogle(code);
 
 

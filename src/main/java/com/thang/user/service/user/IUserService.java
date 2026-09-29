@@ -16,11 +16,9 @@ public interface IUserService {
     UserDTO findUserByEmailDTO(String email);
 
 
-    UserDTO updateUser(String id, UserDTO dto);
 
     void deleteUser(String userId);
 
-    String activeUser(String userId, String activeCode);
 
     String resendActiveCode(String userId);
 
@@ -32,13 +30,10 @@ public interface IUserService {
 
     TokenUserResponse refresh(String refreshToken);
 
-    void logout(String userId);
 
-    void logoutAllSessions(String userId);
 
     void forceLogoutUser(String userId, String sessionId);
     String checkEmailWhenLogin(String email);
-    String extractSessionId(String accessToken);
 
     GoogleLoginResponse  loginWithGoogle(String code);
 

@@ -20,10 +20,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.regex.Pattern;
 
 @Service
 @Slf4j
@@ -87,7 +85,7 @@ public class UserServiceImpl implements IUserService {
 
         if (isInvalidPassword(dto.getPassword())) {
 
-            throw new Exception("Password phải có ít nhất 8 ký tự, " + "bao gồm chữ hoa, số và ký tự đặc biệt");
+            throw new Exception("Mật khẩu cần ít nhất 8 ký tự, tối đa 72 byte UTF-8, gồm chữ hoa, chữ thường, số và ký tự đặc biệt");
         }
 
         String activeCode = createActiveCode();
@@ -138,7 +136,7 @@ public class UserServiceImpl implements IUserService {
 
         kafkaTemplate.send("send-email-active-response", message);
 
-        log.info("Đã gửi email kích hoạt cho userId={}", savedUser.getUserId());
+        log.info("Đã tạo yêu cầu gửi email kích hoạt cho userId={}", savedUser.getUserId());
 
         return savedUser;
     }
@@ -196,48 +194,7 @@ public class UserServiceImpl implements IUserService {
     }
 
 
-    @Override
-    @Transactional
-    public UserDTO updateUser(String id, UserDTO dto) {
 
-        if (dto == null) {
-            return null;
-        }
-
-        Optional<User> optionalUser = userRepository.findById(id);
-
-        if (optionalUser.isEmpty()) {
-            return null;
-        }
-
-        User user = optionalUser.get();
-
-        if (dto.getFirstName() != null) {
-
-            user.setFirstName(dto.getFirstName());
-        }
-
-        if (dto.getLastName() != null) {
-
-            user.setLastName(dto.getLastName());
-        }
-
-        if (dto.getPhoneNumber() != null) {
-
-            user.setPhoneNumber(dto.getPhoneNumber());
-        }
-
-        if (dto.getAddress() != null) {
-
-            user.setAddress(dto.getAddress());
-        }
-
-        user.setDateModified(LocalDateTime.now());
-
-        User savedUser = userRepository.save(user);
-
-        return mapperUserToUserDTO(savedUser);
-    }
 
     // =========================================================
     // DELETE USER
@@ -366,13 +323,7 @@ public class UserServiceImpl implements IUserService {
     // =========================================================
 
     private static boolean isInvalidPassword(String password) {
-
-        if (password == null) {
-            return true;
-        }
-        String regex = "^(?=.*[0-9])" + "(?=.*[A-Z])" + "(?=.*[@#$%^&+=!])" + "(?=.{8,}).*$";
-
-        return !Pattern.compile(regex).matcher(password).matches();
+        return !PasswordPolicy.valid(password);
     }
 
     @Override
@@ -456,57 +407,7 @@ public class UserServiceImpl implements IUserService {
     // ACTIVE USER
     // =========================================================
 
-    @Override
-    @Transactional
-    public String activeUser(String userId, String activeCode) {
 
-        Optional<User> userOptional = userRepository.findByUserId(userId);
-
-        if (userOptional.isEmpty()) {
-
-            return "NOT_FOUND";
-        }
-
-        User user = userOptional.get();
-
-        if (user.isActive()) {
-
-            return "ALREADY_ACTIVE";
-        }
-
-        if (activeCode == null || !activeCode.equals(user.getCodeActive())) {
-
-            return "INVALID";
-        }
-
-        if (user.getCodeActiveExpiredAt() == null || user.getCodeActiveExpiredAt().isBefore(LocalDateTime.now())) {
-
-            return "EXPIRED";
-        }
-
-        try {
-
-            user.setActive(true);
-
-            user.setCodeActive(null);
-
-            user.setCodeActiveExpiredAt(null);
-
-            user.setDateModified(LocalDateTime.now());
-
-            userRepository.save(user);
-
-            log.info("Kích hoạt tài khoản thành công: userId={}, email={}", user.getUserId(), user.getEmail());
-
-            return "SUCCESS";
-
-        } catch (Exception e) {
-
-            log.error("Active user failed: userId={}", userId, e);
-
-            return "Kích hoạt thất bại do lỗi hệ thống";
-        }
-    }
 
     // =========================================================
     // RESEND ACTIVE CODE
@@ -557,47 +458,13 @@ public class UserServiceImpl implements IUserService {
     // LOGOUT
     // =========================================================
 
-    @Override
-    @Transactional
-    public void logout(String userId) {
 
-        if (userId == null || userId.isBlank()) {
-
-            return;
-        }
-
-        sessionService.removeSession(userId);
-
-        log.info("User logged out: userId={}", userId);
-    }
 
     // =========================================================
     // LOGOUT ALL SESSIONS
     // =========================================================
 
-    @Override
-    @Transactional
-    public void logoutAllSessions(String userId) {
 
-        if (userId == null || userId.isBlank()) {
-
-            return;
-        }
-
-        /*
-         * Hiện tại Redis chỉ lưu:
-         *
-         * user:session:{userId}
-         *
-         * nên mỗi user chỉ có một session.
-         *
-         * Xóa session này = logout toàn bộ.
-         */
-
-        sessionService.removeSession(userId);
-
-        log.info("Logout all sessions: userId={}", userId);
-    }
 
     // =========================================================
     // FORCE LOGOUT
@@ -712,13 +579,7 @@ public class UserServiceImpl implements IUserService {
     }
 
 
-    @Override
-    public String extractSessionId(String accessToken) {
 
-        Claims claims = jwtService.parseAndValidate(accessToken);
-
-        return claims.get("sessionId", String.class);
-    }
 
     @Override
     @Transactional
@@ -857,7 +718,7 @@ public class UserServiceImpl implements IUserService {
 
         if (isInvalidPassword(request.getPassword())) {
 
-            throw new RuntimeException("Password phải có ít nhất 8 ký tự, " + "bao gồm chữ hoa, số và ký tự đặc biệt");
+            throw new RuntimeException("Mật khẩu cần ít nhất 8 ký tự, tối đa 72 byte UTF-8, gồm chữ hoa, chữ thường, số và ký tự đặc biệt");
         }
 
 

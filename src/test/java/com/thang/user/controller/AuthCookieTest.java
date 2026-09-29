@@ -12,7 +12,7 @@ class AuthCookieTest {
     final IUserService users = mock(IUserService.class);
     final SessionService sessions = mock(SessionService.class);
     final JwtService jwt = new JwtService(Base64.getEncoder().encodeToString(new byte[32]), 300000, 604800000);
-    final AuthController controller = new AuthController(users, sessions, jwt);
+    final AuthController controller = new AuthController(users, sessions, jwt, new com.thang.user.service.user.GoogleOAuthState());
     TokenUserResponse tokens() {
         return TokenUserResponse.builder().access_token("access").refresh_token("refresh")
             .accessExpiresAt(System.currentTimeMillis() + 300000)

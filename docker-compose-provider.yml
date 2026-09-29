@@ -9,7 +9,7 @@ services:
 
     environment:
       KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Set KEYCLOAK_ADMIN_PASSWORD}
       KC_THEME_CACHE_THEMES: "false"
       KC_THEME_CACHE_TEMPLATES: "false"
 
