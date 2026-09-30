@@ -3,7 +3,7 @@ server:
 
 spring:
   config:
-    import: "optional:file:./.local/user.properties,optional:file:../.local/user.properties,optional:file:./.local/audit-secrets-oauth2.properties,optional:file:./oauth2/.local/audit-secrets-oauth2.properties"
+    import: "optional:file:./.local/shared.properties,optional:file:../.local/shared.properties"
   application:
     name: user-service
 
@@ -12,7 +12,7 @@ spring:
       host: ${REDIS_HOST:160.22.107.232}
       port: ${REDIS_PORT:6379}
       username: ${REDIS_USERNAME:}
-      password: ${REDIS_PASSWORD:thuThuy@123}
+      password: ${REDIS_PASSWORD}
 
   datasource:
     url: jdbc:mysql://onehost-amdcloudhn022602.000nethost.com:3306/tsezwyvdhosting_nihongo?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
@@ -61,7 +61,7 @@ jwt:
 
 google:
   client-id: 243434037577-d3hf8i7nijo996g3ate2pibmsli3bhff.apps.googleusercontent.com
-  client-secret: ${GOOGLE_CLIENT_SECRET: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}
+  client-secret: ${GOOGLE_CLIENT_SECRET}
   redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8082/api/auth/callbackGoogle}
 
 api:
