@@ -117,6 +117,18 @@ public class AuthController {
         return claims;
     }
 
+    // Called directly by the gateway. A valid signed access token is required.
+    @GetMapping("/session/validate")
+    public ResponseEntity<Void> validateSession(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
+        if (authorization == null || !authorization.startsWith("Bearer ")) return ResponseEntity.status(401).build();
+        try {
+            activeClaims(authorization.substring(7), false);
+            return ResponseEntity.noContent().build();
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(401).build();
+        }
+    }
+
     @PostMapping("/logout")
     public ResponseEntity<?> logout(@CookieValue(value = "refreshToken", required = false) String refreshToken,
                                    @CookieValue(value = "accessToken", required = false) String accessToken) {

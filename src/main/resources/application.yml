@@ -7,13 +7,6 @@ spring:
   application:
     name: user-service
 
-  data:
-    redis:
-      host: ${REDIS_HOST:160.22.107.232}
-      port: ${REDIS_PORT:6379}
-      username: ${REDIS_USERNAME:}
-      password: ${REDIS_PASSWORD}
-
   datasource:
     url: jdbc:mysql://onehost-amdcloudhn022602.000nethost.com:3306/tsezwyvdhosting_nihongo?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
     username: tsezwyvdhosting_nihongo_app
@@ -35,7 +28,9 @@ spring:
         dialect: org.hibernate.dialect.MySQLDialect
 
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:160.22.107.232:9092}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:127.0.0.1:9092}
+    admin:
+      auto-create: ${KAFKA_AUTO_CREATE_TOPICS:true}
     producer:
       acks: all
       enable-idempotence: true

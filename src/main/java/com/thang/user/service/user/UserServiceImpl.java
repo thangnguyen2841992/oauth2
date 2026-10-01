@@ -211,7 +211,7 @@ public class UserServiceImpl implements IUserService {
 
         User user = userRepository.findByUserId(userId).orElseThrow(() -> new RuntimeException("USER_NOT_FOUND"));
 
-        // Xóa session Redis trước
+        // Thu hồi phiên trước khi xóa tài khoản.
         sessionService.removeSession(user.getUserId());
 
         // Xóa user DB
