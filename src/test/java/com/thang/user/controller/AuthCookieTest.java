@@ -37,6 +37,22 @@ class AuthCookieTest {
         var response = new MockHttpServletResponse(); controller.setupGooglePassword(null, response);
         assertCookies(response.getHeaders("Set-Cookie"));
     }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({"USER,/user/my-courses", "ADMIN,/", "STAFF,/"})
+    void googleLoginRedirectsUsersToMyCourses(String role, String destination) throws Exception {
+        org.springframework.test.util.ReflectionTestUtils.setField(controller, "frontendUrl", "http://localhost:5173");
+        var user = new com.thang.user.model.entity.User();
+        user.setUserId("user"); user.setRoleName(role); user.setEmail("user@example.com");
+        var token = tokens();
+        token.setAccess_token(jwt.generateAccessToken(user, "session"));
+        when(users.loginWithGoogle("code")).thenReturn(com.thang.user.model.dto.GoogleLoginResponse.builder()
+                .status("LOGIN").token(token).build());
+        String state = new GoogleOAuthState().issue();
+        var response = new MockHttpServletResponse();
+        controller.callbackGoogle("code", state, state, response);
+        assertEquals("http://localhost:5173" + destination, response.getRedirectedUrl());
+        assertTrue(response.getHeaders("Set-Cookie").stream().anyMatch(cookie -> cookie.startsWith("accessToken=")));
+    }
     @Test void logoutWorksWithRefreshOnlyAndCannotRemoveAnotherSession() {
         var user = new com.thang.user.model.entity.User(); user.setUserId("user"); user.setRoleName("USER");
         controller.logout(jwt.generateRefreshToken(user, "old-session"), null);

@@ -8,7 +8,7 @@ spring:
     name: user-service
 
   datasource:
-    url: jdbc:mysql://onehost-amdcloudhn022602.000nethost.com:3306/tsezwyvdhosting_nihongo?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://onehost-amdcloudhn022602.000nethost.com:3306/tsezwyvdhosting_nihongo?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&connectTimeout=10000&socketTimeout=15000
     username: tsezwyvdhosting_nihongo_app
     password: ${DB_PASSWORD:${SPRING_DATASOURCE_PASSWORD}}
     driver-class-name: com.mysql.cj.jdbc.Driver

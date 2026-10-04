@@ -227,7 +227,9 @@ public class AuthController {
 
             setAuthCookies(response, result.getToken());
 
-            response.sendRedirect(frontendUrl + "/");
+            var roles = jwtService.parseAndValidate(result.getToken().getAccess_token()).get("roles", java.util.List.class);
+            String destination = roles != null && roles.contains("USER") ? "/user/my-courses" : "/";
+            response.sendRedirect(frontendUrl + destination);
 
             return;
         }
