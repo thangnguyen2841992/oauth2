@@ -76,8 +76,16 @@ public class AuthController {
 
             return ResponseEntity.ok(Map.of("email", saveUser.getEmail(), "userId", saveUser.getUserId(), "message", "Đăng ký thành công. Vui lòng kiểm tra email để kích hoạt tài khoản."));
 
-        } catch (Exception e) {
-            return ResponseEntity.status(400).body("Đăng ký thất bại!");
+        } catch (org.springframework.web.server.ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode()).body(Map.of("message", e.getReason() == null ? "Đăng ký thất bại" : e.getReason()));
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", "Email đã tồn tại"));
+        } catch (org.springframework.dao.DataAccessException e) {
+            log.warn("Registration storage unavailable: {}", e.getClass().getSimpleName());
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of("message", "Dịch vụ đăng ký tạm thời gián đoạn. Vui lòng thử lại."));
+        } catch (RuntimeException e) {
+            log.error("Registration failed", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("message", "Đăng ký thất bại. Vui lòng thử lại."));
         }
     }
 
@@ -85,7 +93,7 @@ public class AuthController {
     public ResponseEntity<?> checkLogin(@CookieValue(value = "accessToken", required = false) String token) {
         try {
             var claims = activeClaims(token, false);
-            UserDTO user = userService.extractUsername(token);
+            UserDTO user = userService.extractUsername(claims);
             if (user == null) return ResponseEntity.status(401).body(Map.of("isLoggedIn", false));
             return ResponseEntity.ok(Map.of("isLoggedIn", true, "userId", user.getUserId(), "name", user.getFullName(),
                 "email", user.getEmail(), "role", user.getRoleName(), "sessionId", claims.get("sessionId", String.class)));

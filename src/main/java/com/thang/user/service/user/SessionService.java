@@ -27,7 +27,8 @@ public class SessionService {
     public String getSession(String userId) {
         Session session = sessions.get(userId);
         if (session == null) return null;
-        if (session.expires <= System.currentTimeMillis()) {
+        long now = System.currentTimeMillis();
+        if (session.expires <= now || session.idle <= now) {
             sessions.remove(userId, session);
             return null;
         }
@@ -50,6 +51,16 @@ public class SessionService {
     public Long deadline(String userId, String sid, boolean activity) {
         if (userId == null || sid == null) return null;
         long now = System.currentTimeMillis();
+        if (!activity) {
+            Session session = sessions.get(userId);
+            if (session == null || !sid.equals(session.sid)) return null;
+            if (session.expires <= now || session.idle <= now) {
+                sessions.remove(userId, session);
+                return null;
+            }
+            // Avoid a map write and per-user lock on every session validation.
+            return sessions.get(userId) == session ? Math.min(session.expires, session.idle) : null;
+        }
         AtomicReference<Long> result = new AtomicReference<>();
         sessions.computeIfPresent(userId, (ignored, session) -> {
             if (!sid.equals(session.sid)) return session;

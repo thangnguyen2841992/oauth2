@@ -62,4 +62,18 @@ class AuthCookieTest {
     @Test void checkLoginWithoutAccessReturns401SoClientCanRefresh() {
         assertEquals(401, controller.checkLogin(null).getStatusCode().value());
     }
+    @Test void checkLoginUsesAlreadyValidatedClaims() {
+        var user = new com.thang.user.model.entity.User();
+        user.setUserId("user"); user.setEmail("user@example.com"); user.setRoleName("USER");
+        String access = jwt.generateAccessToken(user, "session");
+        when(sessions.deadline("user", "session", false)).thenReturn(System.currentTimeMillis() + 60000);
+        var dto = new com.thang.user.model.dto.UserDTO();
+        dto.setUserId("user"); dto.setEmail("user@example.com"); dto.setFullName("User"); dto.setRoleName("USER");
+        when(users.extractUsername(any(io.jsonwebtoken.Claims.class))).thenReturn(dto);
+
+        var response = controller.checkLogin(access);
+
+        assertEquals(200, response.getStatusCode().value());
+        verify(users).extractUsername(argThat(claims -> "user".equals(claims.getSubject())));
+    }
 }

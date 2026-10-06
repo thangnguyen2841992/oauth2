@@ -56,36 +56,36 @@ public class UserServiceImpl implements IUserService {
 
     @Override
     @Transactional
-    public User createUser(CreateUserRequest dto) throws Exception {
+    public User createUser(CreateUserRequest dto) {
 
         if (dto == null) {
-            throw new Exception("Thông tin user không được để trống");
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "Thông tin user không được để trống");
         }
 
         if (dto.getEmail() == null || dto.getEmail().isBlank()) {
 
-            throw new Exception("Email không được để trống");
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "Email không được để trống");
         }
 
         boolean isExistEmail = userRepository.existsByEmail(dto.getEmail());
 
         if (isExistEmail) {
-            throw new Exception("Email đã tồn tại");
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, "Email đã tồn tại");
         }
 
         if (dto.getPassword() == null || dto.getPassword().isBlank()) {
 
-            throw new Exception("Password không được để trống");
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "Password không được để trống");
         }
 
         if (!dto.getPassword().equals(dto.getConfirmPassword())) {
 
-            throw new Exception("Password không khớp");
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "Password không khớp");
         }
 
         if (isInvalidPassword(dto.getPassword())) {
 
-            throw new Exception("Mật khẩu cần ít nhất 8 ký tự, tối đa 72 byte UTF-8, gồm chữ hoa, chữ thường, số và ký tự đặc biệt");
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "Mật khẩu cần ít nhất 8 ký tự, tối đa 72 byte UTF-8, gồm chữ hoa, chữ thường, số và ký tự đặc biệt");
         }
 
         String activeCode = createActiveCode();
@@ -98,7 +98,11 @@ public class UserServiceImpl implements IUserService {
 
         user.setLastName(dto.getLastName());
 
-        user.setDateOfBirth(formatDateFromStringToDate(dto.getDateOfBirth()));
+        try {
+            user.setDateOfBirth(formatDateFromStringToDate(dto.getDateOfBirth()));
+        } catch (java.time.format.DateTimeParseException e) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "Ngày sinh không hợp lệ", e);
+        }
 
         user.setEmail(dto.getEmail());
 
@@ -304,7 +308,6 @@ public class UserServiceImpl implements IUserService {
     // =========================================================
 
     @Override
-    @Transactional
     public TokenUserResponse refresh(String refreshToken) {
 
         if (refreshToken == null || refreshToken.isBlank()) {
@@ -327,16 +330,12 @@ public class UserServiceImpl implements IUserService {
     }
 
     @Override
-    public UserDTO extractUsername(String token) {
+    public UserDTO extractUsername(Claims claims) {
         try {
-            if (token == null || token.isBlank()) {
+            if (claims == null) {
 
                 return null;
             }
-            /*
-             * Verify JWT trước khi lấy thông tin.
-             */
-            Claims claims = jwtService.parseAndValidate(token);
             UserDTO dto = new UserDTO();
 
             // =================================================

@@ -7,7 +7,7 @@ import java.util.List;
 
 public interface IUserService {
 
-    User createUser(CreateUserRequest dto) throws Exception;
+    User createUser(CreateUserRequest dto);
 
     List<UserDTO> getAllUsers();
 
@@ -22,7 +22,7 @@ public interface IUserService {
 
     String resendActiveCode(String userId);
 
-    UserDTO extractUsername(String token);
+    UserDTO extractUsername(io.jsonwebtoken.Claims claims);
 
 
 
