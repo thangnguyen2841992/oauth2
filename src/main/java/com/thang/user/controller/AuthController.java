@@ -96,7 +96,8 @@ public class AuthController {
             UserDTO user = userService.extractUsername(claims);
             if (user == null) return ResponseEntity.status(401).body(Map.of("isLoggedIn", false));
             return ResponseEntity.ok(Map.of("isLoggedIn", true, "userId", user.getUserId(), "name", user.getFullName(),
-                "email", user.getEmail(), "role", user.getRoleName(), "sessionId", claims.get("sessionId", String.class)));
+                "email", user.getEmail(), "role", user.getRoleName(), "sessionId", claims.get("sessionId", String.class),
+                "accessExpiresAt", claims.getExpiration().getTime()));
         } catch (org.springframework.dao.DataAccessException e) {
             return ResponseEntity.status(503).body(Map.of("message", "Dịch vụ đăng nhập tạm thời gián đoạn"));
         } catch (RuntimeException e) {
@@ -179,7 +180,8 @@ public class AuthController {
 
             ResponseCookie newRefreshToken = getCookie(res);
 
-            return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, accessToken.toString()).header(HttpHeaders.SET_COOKIE, newRefreshToken.toString()).body(Map.of("message", "refreshed"));
+            return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, accessToken.toString()).header(HttpHeaders.SET_COOKIE, newRefreshToken.toString())
+                    .body(Map.of("message", "refreshed", "accessExpiresAt", res.getAccessExpiresAt()));
 
         } catch (Exception e) {
 
