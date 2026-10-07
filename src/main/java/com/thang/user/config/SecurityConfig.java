@@ -35,6 +35,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/active-user/**").permitAll()
                         .requestMatchers("/images/**").permitAll()
 
+                        .requestMatchers("/api/users/admin/**").hasRole("ADMIN")
+
                         .requestMatchers("/api/users/**")
                         .hasAnyRole("ADMIN", "STAFF", "USER")
 

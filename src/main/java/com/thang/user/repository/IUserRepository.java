@@ -18,4 +18,7 @@ public interface IUserRepository extends JpaRepository<User, String> {
     Optional<User> findByUserId(String userId);
 
     boolean existsByEmail(String email);
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("select u from User u where u.roleName = :role and u.isActive = true order by u.userId")
+    java.util.List<User> lockActiveByRole(@org.springframework.data.repository.query.Param("role") String role);
 }
