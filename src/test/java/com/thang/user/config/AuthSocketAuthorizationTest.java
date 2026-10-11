@@ -20,11 +20,12 @@ class AuthSocketAuthorizationTest {
         var headers = StompHeaderAccessor.create(command);
         headers.setDestination(destination);
         headers.setUser(new JwtAuthenticationToken(Jwt.withTokenValue("test").header("alg", "HS512")
-                .subject("owner").claim("type", "access").claim("sessionId", "sid").expiresAt(expiry).build()));
+                .subject("owner").claim("type", "access").claim("roles",java.util.List.of("USER")).claim("sessionId", "sid").expiresAt(expiry).build()));
         return MessageBuilder.createMessage(new byte[0], headers.getMessageHeaders());
     }
 
     @Test void allowsOnlyAnActiveSessionToSubscribeToItsLogoutQueue() {
+        when(sessions.roleMatches("owner","sid",java.util.List.of("USER"))).thenReturn(true);
         when(sessions.deadline("owner", "sid", false)).thenReturn(System.currentTimeMillis()+60000);
         var message = frame(StompCommand.SUBSCRIBE, "/user/queue/logout", Instant.now().plusSeconds(60));
         assertSame(message, authorization.preSend(message, null));

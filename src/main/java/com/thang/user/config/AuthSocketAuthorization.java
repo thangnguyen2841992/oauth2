@@ -27,7 +27,8 @@ public class AuthSocketAuthorization implements ChannelInterceptor {
         var jwt = authentication.getToken();
         if (!"access".equals(jwt.getClaimAsString("type")) || jwt.getExpiresAt() == null
                 || !jwt.getExpiresAt().isAfter(Instant.now())
-                || sessions.deadline(jwt.getSubject(), jwt.getClaimAsString("sessionId"), false) == null) throw denied();
+                || sessions.deadline(jwt.getSubject(), jwt.getClaimAsString("sessionId"), false) == null
+                || !sessions.roleMatches(jwt.getSubject(),jwt.getClaimAsString("sessionId"),jwt.getClaimAsStringList("roles"))) throw denied();
         if (frame.getCommand() == StompCommand.SEND) throw denied();
         if (frame.getCommand() == StompCommand.SUBSCRIBE && !"/user/queue/logout".equals(frame.getDestination())) throw denied();
         return message;

@@ -15,7 +15,7 @@ class AuthAvailabilityTest {
     @Test void databaseFailureDuringRefreshIsUnavailableNotInvalidToken() {
         var users = mock(IUserService.class);
         when(users.refresh("test-token")).thenThrow(new DataAccessResourceFailureException("offline"));
-        var controller = new AuthController(users, mock(SessionService.class), mock(com.thang.user.service.user.JwtService.class), new com.thang.user.service.user.GoogleOAuthState());
+        var controller = new AuthController(users, mock(SessionService.class), mock(com.thang.user.service.user.JwtService.class), new com.thang.user.service.user.GoogleOAuthState(),mock(com.nihongo.security.InternalCredentials.class));
         var response = controller.refresh("test-token");
         assertEquals(503, response.getStatusCode().value());
         assertNull(response.getHeaders().getFirst("Set-Cookie"));
@@ -23,20 +23,20 @@ class AuthAvailabilityTest {
     @Test void invalidTokenStillRequiresLogin() {
         var users = mock(IUserService.class);
         when(users.refresh("invalid")).thenThrow(new RuntimeException("Invalid refresh token"));
-        var controller = new AuthController(users, mock(SessionService.class), mock(com.thang.user.service.user.JwtService.class), new com.thang.user.service.user.GoogleOAuthState());
+        var controller = new AuthController(users, mock(SessionService.class), mock(com.thang.user.service.user.JwtService.class), new com.thang.user.service.user.GoogleOAuthState(),mock(com.nihongo.security.InternalCredentials.class));
         assertEquals(401, controller.refresh("invalid").getStatusCode().value());
         assertEquals(401, controller.refresh(null).getStatusCode().value());
     }
     @Test void databaseFailureDuringLoginIsUnavailable() {
         var users = mock(IUserService.class);
         when(users.login(null)).thenThrow(new DataAccessResourceFailureException("offline"));
-        var controller = new AuthController(users, mock(SessionService.class), mock(com.thang.user.service.user.JwtService.class), new com.thang.user.service.user.GoogleOAuthState());
+        var controller = new AuthController(users, mock(SessionService.class), mock(com.thang.user.service.user.JwtService.class), new com.thang.user.service.user.GoogleOAuthState(),mock(com.nihongo.security.InternalCredentials.class));
         assertEquals(503, controller.login(null).getStatusCode().value());
     }
     @Test void registrationReturnsExpectedErrorAndAvailabilityStatus() {
         var users = mock(IUserService.class);
         var request = new CreateUserRequest();
-        var controller = new AuthController(users, mock(SessionService.class), mock(com.thang.user.service.user.JwtService.class), new com.thang.user.service.user.GoogleOAuthState());
+        var controller = new AuthController(users, mock(SessionService.class), mock(com.thang.user.service.user.JwtService.class), new com.thang.user.service.user.GoogleOAuthState(),mock(com.nihongo.security.InternalCredentials.class));
         doThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ngày sinh không hợp lệ")).when(users).createUser(request);
         assertEquals(400, controller.register(request).getStatusCode().value());
 

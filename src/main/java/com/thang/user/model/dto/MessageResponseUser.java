@@ -15,6 +15,12 @@ public class MessageResponseUser {
     private String toUserFullName;
     private String toUserId;
     private String activeCode;
+    private String purpose;
+    private String recoveryId;
+    private String recoveryToken;
+    public MessageResponseUser(String email,String name,String fullName,String userId,String activeCode) {
+        this.toUserEmail=email;this.toUserName=name;this.toUserFullName=fullName;this.toUserId=userId;this.activeCode=activeCode;
+    }
 
 
 }

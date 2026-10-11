@@ -12,7 +12,7 @@ import static org.mockito.Mockito.*;
 class GoogleLoginTest {
     IUserService users = mock(IUserService.class);
     GoogleOAuthState state = new GoogleOAuthState();
-    AuthController controller = new AuthController(users, mock(SessionService.class), mock(JwtService.class), state);
+    AuthController controller = new AuthController(users, mock(SessionService.class), mock(JwtService.class), state,mock(com.nihongo.security.InternalCredentials.class));
 
     @Test void loginBindsAStateCookieToTheRedirect() throws Exception {
         ReflectionTestUtils.setField(controller, "googleClientId", "client-id");

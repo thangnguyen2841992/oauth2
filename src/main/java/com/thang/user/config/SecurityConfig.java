@@ -25,7 +25,8 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(
-            HttpSecurity http) throws Exception {
+            HttpSecurity http, com.nihongo.security.BrowserOriginPolicy origins, com.nihongo.security.InternalCredentials credentials,
+            com.thang.user.service.user.SessionService sessions,org.springframework.core.env.Environment env) throws Exception {
 
         http
                 .csrf(AbstractHttpConfigurer::disable)
@@ -55,6 +56,8 @@ public class SecurityConfig {
                 jwtCookieFilter,
                 org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class
         );
+        http.addFilterBefore(new com.nihongo.security.BrowserOriginServletFilter(origins,credentials,env.getProperty("security.origin-check.enabled",Boolean.class,true)),org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class);
+        http.addFilterAfter(new UserSessionValidationFilter(sessions,env.getProperty("security.session-validation.enabled",Boolean.class,true)),org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class);
 
         return http.build();
     }

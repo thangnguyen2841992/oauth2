@@ -36,3 +36,5 @@ build/
 /.local/
 
 /.env
+
+/logs/

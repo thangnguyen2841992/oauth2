@@ -1,9 +1,10 @@
 server:
+  address: ${SERVICE_BIND_ADDRESS:127.0.0.1}
   port: 8081
 
 spring:
-  config:
-    import: "optional:file:./.local/shared.properties,optional:file:../.local/shared.properties"
+  profiles:
+    default: local
   application:
     name: user-service
 
@@ -21,6 +22,7 @@ spring:
       connection-timeout: 30000
       validation-timeout: 5000
   jpa:
+    show-sql: false
     hibernate:
       ddl-auto: update
     properties:
@@ -37,10 +39,19 @@ spring:
       retries: 5
       max-in-flight-requests-per-connection: 1
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        max.block.ms: 5000
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 15000
+  task:
+    scheduling:
+      pool:
+        size: 2
 
 eureka:
   instance:
     prefer-ip-address: true
+    ip-address: ${SERVICE_ADVERTISED_ADDRESS:127.0.0.1}
   client:
     register-with-eureka: true
     fetch-registry: true
@@ -48,7 +59,7 @@ eureka:
       defaultZone: ${EUREKA_URL:http://localhost:8761/eureka}
 
 jwt:
-  secret: ${JWT_SECRET}
+  secret: ${JWT_SECRET:}
   access-expiration: 300000
   refresh-expiration: 604800000
   admin-refresh-expiration: 28800000
@@ -61,7 +72,3 @@ google:
 
 api:
   key: thangdeptrai
-
-logging:
-  level:
-    org.springframework.cloud.gateway: DEBUG

@@ -28,6 +28,7 @@ public class AuthController {
     private final SessionService sessionService;
     private final com.thang.user.service.user.JwtService jwtService;
     private final com.thang.user.service.user.GoogleOAuthState googleOAuthState;
+    private final com.nihongo.security.InternalCredentials internalCredentials;
 
     @Value("${google.client-id}")
     private String googleClientId;
@@ -35,7 +36,7 @@ public class AuthController {
     @Value("${google.redirect-uri}")
     private String googleRedirectUri;
     @Value("${FRONTEND_URL:http://localhost:5173}") private String frontendUrl;
-    @Value("${COOKIE_SECURE:false}") private boolean cookieSecure;
+    @Value("${COOKIE_SECURE:true}") private boolean cookieSecure = true;
 
 
     @PostMapping("/login")
@@ -49,6 +50,10 @@ public class AuthController {
 
             return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, accessToken.toString()).header(HttpHeaders.SET_COOKIE, refreshToken.toString()).body(Map.of("message", "Login success"));
 
+        } catch (com.thang.user.service.user.MfaRequiredException required) {
+            return ResponseEntity.status(202).header(HttpHeaders.SET_COOKIE,
+                    ResponseCookie.from("mfaChallenge", required.challenge()).path("/").maxAge(300).httpOnly(true).secure(cookieSecure).sameSite("Lax").build().toString())
+                    .body(Map.of("mfaRequired", true));
         } catch (org.springframework.dao.DataAccessException e) {
             log.warn("Login storage unavailable: {}", e.getClass().getSimpleName());
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
@@ -120,7 +125,7 @@ public class AuthController {
     private io.jsonwebtoken.Claims activeClaims(String token, boolean activity) {
         var claims = jwtService.parseAndValidate(token);
         if (!"access".equals(claims.get("type", String.class)) ||
-            sessionService.deadline(claims.getSubject(), claims.get("sessionId", String.class), activity) == null) {
+            sessionService.accessDeadline(claims.getSubject(),claims.get("sessionId",String.class),claims.get("roles",java.util.List.class),activity)==null) {
             throw new IllegalArgumentException("Session expired");
         }
         return claims;
@@ -128,11 +133,15 @@ public class AuthController {
 
     // Called directly by the gateway. A valid signed access token is required.
     @GetMapping("/session/validate")
-    public ResponseEntity<Void> validateSession(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
+    public ResponseEntity<Void> validateSession(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+            @RequestHeader(value=com.nihongo.security.InternalCredentials.HEADER,required=false) String internalKey) {
+        if(!internalCredentials.matches(internalKey))return ResponseEntity.status(401).build();
         if (authorization == null || !authorization.startsWith("Bearer ")) return ResponseEntity.status(401).build();
         try {
             activeClaims(authorization.substring(7), false);
             return ResponseEntity.noContent().build();
+        } catch (org.springframework.dao.DataAccessException e) {
+            return ResponseEntity.status(503).build();
         } catch (RuntimeException e) {
             return ResponseEntity.status(401).build();
         }
@@ -226,7 +235,13 @@ public class AuthController {
                                HttpServletResponse response) throws IOException {
         response.addHeader(HttpHeaders.SET_COOKIE, googleStateCookie("", 0).toString());
         googleOAuthState.verify(state, expectedState);
-        GoogleLoginResponse result = userService.loginWithGoogle(code);
+        GoogleLoginResponse result;
+        try { result = userService.loginWithGoogle(code); }
+        catch (com.thang.user.service.user.MfaRequiredException required) {
+            response.addHeader(HttpHeaders.SET_COOKIE, ResponseCookie.from("mfaChallenge", required.challenge()).path("/").maxAge(300).httpOnly(true).secure(cookieSecure).sameSite("Lax").build().toString());
+            response.sendRedirect(frontendUrl + "/login?mfa=1");
+            return;
+        }
 
 
         // =====================================================

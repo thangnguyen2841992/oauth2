@@ -12,7 +12,7 @@ class AuthCookieTest {
     final IUserService users = mock(IUserService.class);
     final SessionService sessions = mock(SessionService.class);
     final JwtService jwt = new JwtService(Base64.getEncoder().encodeToString(new byte[32]), 300000, 604800000);
-    final AuthController controller = new AuthController(users, sessions, jwt, new com.thang.user.service.user.GoogleOAuthState());
+    final AuthController controller = new AuthController(users, sessions, jwt, new com.thang.user.service.user.GoogleOAuthState(),mock(com.nihongo.security.InternalCredentials.class));
     TokenUserResponse tokens() {
         return TokenUserResponse.builder().access_token("access").refresh_token("refresh")
             .accessExpiresAt(System.currentTimeMillis() + 300000)
@@ -66,7 +66,8 @@ class AuthCookieTest {
         var user = new com.thang.user.model.entity.User();
         user.setUserId("user"); user.setEmail("user@example.com"); user.setRoleName("USER");
         String access = jwt.generateAccessToken(user, "session");
-        when(sessions.deadline("user", "session", false)).thenReturn(System.currentTimeMillis() + 60000);
+        when(sessions.accessDeadline("user","session",java.util.List.of("USER"),false)).thenReturn(System.currentTimeMillis()+60000);
+        when(sessions.roleMatches("user","session",java.util.List.of("USER"))).thenReturn(true);
         var dto = new com.thang.user.model.dto.UserDTO();
         dto.setUserId("user"); dto.setEmail("user@example.com"); dto.setFullName("User"); dto.setRoleName("USER");
         when(users.extractUsername(any(io.jsonwebtoken.Claims.class))).thenReturn(dto);

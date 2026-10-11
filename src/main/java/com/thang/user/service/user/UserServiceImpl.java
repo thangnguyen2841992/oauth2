@@ -6,7 +6,6 @@ import com.thang.user.repository.IUserRepository;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -27,10 +26,11 @@ import java.util.UUID;
 @Slf4j
 @RequiredArgsConstructor
 public class UserServiceImpl implements IUserService {
+    private static final org.slf4j.Logger sockets = org.slf4j.LoggerFactory.getLogger("nihongo.socket.auth");
 
     private final IUserRepository userRepository;
 
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final ActivationOutboxService activationOutbox;
 
     private final PasswordEncoder passwordEncoder;
 
@@ -49,6 +49,8 @@ public class UserServiceImpl implements IUserService {
     private static final String DEFAULT_ROLE = "USER";
 
     private final GoogleOAuthService googleOAuthService;
+    private final AuthMfaService mfa;
+    private final LoginAuditService loginHistory;
 
     // =========================================================
     // CREATE USER
@@ -138,7 +140,7 @@ public class UserServiceImpl implements IUserService {
 
         message.setActiveCode(activeCode);
 
-        kafkaTemplate.send("send-email-active-response", message);
+        activationOutbox.enqueue(message, savedUser.getCodeActiveExpiredAt());
 
         log.info("Đã tạo yêu cầu gửi email kích hoạt cho userId={}", savedUser.getUserId());
 
@@ -229,7 +231,7 @@ public class UserServiceImpl implements IUserService {
     // =========================================================
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = MfaRequiredException.class)
     public TokenUserResponse login(LoginRequest loginRequest) {
 
         if (loginRequest == null || loginRequest.getEmail() == null || loginRequest.getEmail().isBlank()) {
@@ -253,6 +255,8 @@ public class UserServiceImpl implements IUserService {
 
             throw new RuntimeException("Tài khoản hoặc mật khẩu không đúng");
         }
+
+        mfa.require(user);
 
         // =====================================================
         // TẠO SESSION MỚI
@@ -300,7 +304,9 @@ public class UserServiceImpl implements IUserService {
         // GENERATE JWT
         // =====================================================
 
-        return tokenService.generateToken(user, newSessionId);
+        var result = tokenService.generateToken(user, newSessionId);
+        loginHistory.record(user, "PASSWORD");
+        return result;
     }
 
     // =========================================================
@@ -416,7 +422,7 @@ public class UserServiceImpl implements IUserService {
     @Transactional
     public String resendActiveCode(String userId) {
 
-        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("USER_NOT_FOUND"));
+        User user = userRepository.lockById(userId).orElseThrow(() -> new RuntimeException("USER_NOT_FOUND"));
 
         if (user.isActive()) {
 
@@ -446,7 +452,7 @@ public class UserServiceImpl implements IUserService {
 
         message.setActiveCode(newCode);
 
-        kafkaTemplate.send("send-email-active-response", message);
+        activationOutbox.enqueue(message, user.getCodeActiveExpiredAt());
 
         log.info("Resend activation code: userId={}", user.getUserId());
 
@@ -483,9 +489,24 @@ public class UserServiceImpl implements IUserService {
 
         payload.put("sessionId", oldSessionId);
 
-        messagingTemplate.convertAndSendToUser(userId, "/queue/logout", payload);
-
-        log.info("Force logout user: userId={}, sessionId={}", userId, oldSessionId);
+        Runnable notify = () -> {
+            try {
+                messagingTemplate.convertAndSendToUser(userId, "/queue/logout", payload);
+                sockets.info("event=logout-notification userId={}", userId);
+            } catch (RuntimeException unavailable) {
+                // The persisted session and socket revocation monitor remain authoritative.
+                sockets.warn("event=logout-notification-failed userId={} failure={}", userId, unavailable.getClass().getSimpleName());
+            }
+        };
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()
+                && org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override public void afterCommit() { notify.run(); }
+                    });
+        } else {
+            notify.run();
+        }
     }
 
     @Override
@@ -581,7 +602,7 @@ public class UserServiceImpl implements IUserService {
 
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = MfaRequiredException.class)
     public GoogleLoginResponse loginWithGoogle(String code) {
 
         // =========================================================
@@ -834,6 +855,7 @@ public class UserServiceImpl implements IUserService {
     }
 
     private TokenUserResponse createLoginToken(User user) {
+        mfa.require(user);
 
         // =========================================================
         // SESSION MỚI
@@ -881,6 +903,8 @@ public class UserServiceImpl implements IUserService {
         // JWT
         // =========================================================
 
-        return tokenService.generateToken(user, newSessionId);
+        var result = tokenService.generateToken(user, newSessionId);
+        loginHistory.record(user, "GOOGLE");
+        return result;
     }
 }
