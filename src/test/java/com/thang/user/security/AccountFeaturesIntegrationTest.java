@@ -13,4 +13,21 @@ class AccountFeaturesIntegrationTest {
  @Test void recoveryUsesEncryptedOutboxSingleUseTokenAndRevokesSessions()throws Exception{tokens.generateToken(user,"sid-1");recovery.request(user.getEmail());assertEquals(1,tickets.count());assertEquals(1,mail.count());var envelope=mail.findAll().get(0);var payload=json.readTree(cipher.decrypt(user.getUserId(),envelope.getEncryptedPayload()));assertEquals("PASSWORD_RESET",payload.get("purpose").asText());String token=payload.get("recoveryToken").asText(),id=payload.get("recoveryId").asText();assertFalse(envelope.getEncryptedPayload().contains(token));var input=new AccountRecoveryService.Reset(id,token,"Changed2!pass","Changed2!pass");recovery.reset(input);assertNull(sessions.getSession(user.getUserId()));assertTrue(passwords.matches("Changed2!pass",users.findById(user.getUserId()).orElseThrow().getPassword()));assertThrows(org.springframework.web.server.ResponseStatusException.class,()->recovery.reset(input));}
  @Test void unknownOrInactiveEmailDoesNotEnqueueAndOldPasswordInvalidatesChallenges(){recovery.request("unknown@example.test");assertEquals(0,tickets.count());String secret=enable();var challenge=assertThrows(MfaRequiredException.class,()->login.login(request())).challenge();profiles.changePassword(user.getUserId(),new AccountProfileService.ChangePassword(password,"Changed2!pass","Changed2!pass"));assertNull(mfa.verify(challenge,TotpCodes.code(secret,System.currentTimeMillis()/30000)).tokens());}
  @Test void profileCannotChangeEmailAndLoginApiSetsOnlyChallengeCookieBeforeMfa()throws Exception{profiles.save(user.getUserId(),new AccountProfileService.Profile("New","Name","attacker@example.test","123",null,null));assertEquals(user.getEmail(),users.findById(user.getUserId()).orElseThrow().getEmail());enable();var response=HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/api/auth/login")).header("Content-Type","application/json").header("Origin","http://localhost:5173").POST(HttpRequest.BodyPublishers.ofString("{\"email\":\""+user.getEmail()+"\",\"password\":\""+password+"\"}")).build(),HttpResponse.BodyHandlers.ofString());assertEquals(202,response.statusCode());var cookies=response.headers().allValues("set-cookie");assertEquals(1,cookies.size());assertTrue(cookies.get(0).startsWith("mfaChallenge="));assertTrue(cookies.get(0).contains("HttpOnly"));assertFalse(response.body().contains("accessToken"));}
+ @Autowired com.nihongo.security.InternalCredentials internalCredentials;
+ @Test void loginPersistsLanSnapshotAndHistoryReturnsItToTheOwner() throws Exception {
+  String signed = new com.nihongo.security.LoginAddressEnvelope(internalCredentials).sign("POST", "/api/auth/login", "127.0.0.1", "192.168.1.8");
+  var client = HttpClient.newHttpClient();
+  var response = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/auth/login"))
+   .header("Content-Type", "application/json").header("Origin", "http://localhost:5173")
+   .header(com.nihongo.security.LoginAddressEnvelope.HEADER, signed)
+   .POST(HttpRequest.BodyPublishers.ofString("{\"email\":\"" + user.getEmail() + "\",\"password\":\"" + password + "\"}")).build(), HttpResponse.BodyHandlers.ofString());
+  assertEquals(200, response.statusCode());
+  var saved = history.findAll().get(0);
+  assertEquals("127.0.0.1", saved.getAddress()); assertEquals("192.168.1.8", saved.getLocalAddresses());
+  String cookie = response.headers().allValues("set-cookie").stream().filter(c -> c.startsWith("accessToken=")).findFirst().orElseThrow().split(";", 2)[0];
+  var auditResponse = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/users/me/logins"))
+   .header("Cookie", cookie).GET().build(), HttpResponse.BodyHandlers.ofString());
+  assertEquals(200, auditResponse.statusCode());
+  assertEquals("192.168.1.8", json.readTree(auditResponse.body()).get("content").get(0).get("localAddresses").asText());
+ }
 }

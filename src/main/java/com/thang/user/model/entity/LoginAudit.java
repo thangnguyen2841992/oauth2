@@ -6,6 +6,7 @@ public class LoginAudit {
  @Column(nullable=false,length=36) private String userId;
  @Column(nullable=false,length=20) private String method;
  @Column(length=64) private String address;
+ @Column(length=512) private String localAddresses;
  @Column(length=200) private String agent;
  @Column(nullable=false) private LocalDateTime createdAt;
 }
