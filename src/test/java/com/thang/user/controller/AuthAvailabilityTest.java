@@ -33,6 +33,13 @@ class AuthAvailabilityTest {
         var controller = new AuthController(users, mock(SessionService.class), mock(com.thang.user.service.user.JwtService.class), new com.thang.user.service.user.GoogleOAuthState(),mock(com.nihongo.security.InternalCredentials.class));
         assertEquals(503, controller.login(null).getStatusCode().value());
     }
+    @Test void emailStepDoesNotRevealWhetherAnAccountExists() {
+        var users = mock(IUserService.class);
+        var controller = new AuthController(users, mock(SessionService.class), mock(com.thang.user.service.user.JwtService.class), new com.thang.user.service.user.GoogleOAuthState(),mock(com.nihongo.security.InternalCredentials.class));
+        assertEquals("LOCAL", ((java.util.Map<?, ?>) controller.checkEmail("unknown@example.test").getBody()).get("type"));
+        assertEquals(400, controller.checkEmail("invalid").getStatusCode().value());
+        verifyNoInteractions(users);
+    }
     @Test void registrationReturnsExpectedErrorAndAvailabilityStatus() {
         var users = mock(IUserService.class);
         var request = new CreateUserRequest();

@@ -27,6 +27,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class UserServiceImpl implements IUserService {
     private static final org.slf4j.Logger sockets = org.slf4j.LoggerFactory.getLogger("nihongo.socket.auth");
+    private volatile String dummyPasswordHash;
 
     private final IUserRepository userRepository;
 
@@ -244,14 +245,10 @@ public class UserServiceImpl implements IUserService {
             throw new RuntimeException("Password không được để trống");
         }
 
-        User user = userRepository.findByEmail(loginRequest.getEmail()).orElseThrow(() -> new RuntimeException("Tài khoản hoặc mật khẩu không đúng"));
-
-        if (!user.isActive()) {
-
-            throw new RuntimeException("Tài khoản chưa kích hoạt");
-        }
-
-        if (!passwordEncoder.matches(loginRequest.getPassword(), user.getPassword())) {
+        User user = userRepository.findByEmail(loginRequest.getEmail()).orElse(null);
+        String storedPassword = user != null && user.getPassword() != null ? user.getPassword() : dummyPasswordHash();
+        boolean passwordMatches = passwordEncoder.matches(loginRequest.getPassword(), storedPassword);
+        if (user == null || !user.isActive() || !passwordMatches) {
 
             throw new RuntimeException("Tài khoản hoặc mật khẩu không đúng");
         }
@@ -509,20 +506,13 @@ public class UserServiceImpl implements IUserService {
         }
     }
 
-    @Override
-    public String checkEmailWhenLogin(String email) {
-        Optional<User> userOptional = userRepository.findByEmail(email);
-        if (userOptional.isEmpty()) {
-            throw new RuntimeException("USER_NOT_EXIST");
+    private String dummyPasswordHash() {
+        String current = dummyPasswordHash;
+        if (current != null) return current;
+        synchronized (this) {
+            if (dummyPasswordHash == null) dummyPasswordHash = passwordEncoder.encode(UUID.randomUUID().toString());
+            return dummyPasswordHash;
         }
-        User user = userOptional.get();
-        if (!user.isActive()) {
-            throw new RuntimeException("USER_NOT_ACTIVE");
-        }
-//        if (user.getGoogleId() != null && !user.getGoogleId().isBlank()) {
-//            return "GOOGLE";
-//        }
-        return "LOCAL";
     }
 
     private LocalDateTime formatDateFromStringToDate(String date) {

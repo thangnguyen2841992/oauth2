@@ -8,6 +8,9 @@ import java.util.Optional;
 
 @Repository
 public interface IUserRepository extends JpaRepository<User, String> {
+    @org.springframework.data.jpa.repository.Query("select u from User u where :search = '' or lower(u.email) like concat('%',:search,'%') or lower(u.firstName) like concat('%',:search,'%') or lower(u.lastName) like concat('%',:search,'%') or lower(u.roleName) like concat('%',:search,'%')")
+    org.springframework.data.domain.Page<User> adminSearch(String search, org.springframework.data.domain.Pageable page);
+    long countByRoleNameAndIsActiveTrue(String roleName);
     @org.springframework.data.jpa.repository.Query("select u from User u where u.isActive=true and u.roleName='USER' and (lower(u.email) like concat('%',lower(:search),'%') or lower(u.firstName) like concat('%',lower(:search),'%') or lower(u.lastName) like concat('%',lower(:search),'%')) order by u.firstName,u.userId")
     org.springframework.data.domain.Page<User> learnerSearch(String search,org.springframework.data.domain.Pageable page);
     interface DirectoryMember { String getUserId(); String getFirstName(); String getLastName(); String getRole(); }

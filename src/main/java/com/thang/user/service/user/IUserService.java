@@ -33,7 +33,6 @@ public interface IUserService {
 
 
     void forceLogoutUser(String userId, String sessionId);
-    String checkEmailWhenLogin(String email);
 
     GoogleLoginResponse  loginWithGoogle(String code);
 

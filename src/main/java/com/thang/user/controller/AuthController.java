@@ -59,8 +59,7 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                     .body(Map.of("message", "Dịch vụ đăng nhập tạm thời gián đoạn. Vui lòng thử lại."));
         } catch (RuntimeException e) {
-
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Tài khoản hoặc mật khẩu không đúng"));
         }
     }
 
@@ -168,9 +167,10 @@ public class AuthController {
     }
     @GetMapping("/checkEmail")
     public ResponseEntity<?> checkEmail(@RequestParam String email) {
-        String result = userService.checkEmailWhenLogin(email);
-
-        return ResponseEntity.ok(Map.of("type", result));
+        if (email == null || email.length() > 255 || !email.trim().matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+")) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Email không hợp lệ"));
+        }
+        return ResponseEntity.ok(Map.of("type", "LOCAL"));
     }
 
     @PostMapping("/refresh")
@@ -266,7 +266,9 @@ public class AuthController {
 
         if ("SET_PASSWORD".equals(result.getStatus())) {
 
-            String redirect = frontendUrl + "/google/setup-password" + "?token=" + result.getSetupToken() + "&email=" + java.net.URLEncoder.encode(result.getEmail(), java.nio.charset.StandardCharsets.UTF_8);
+            String redirect = frontendUrl + "/google/setup-password" + "#token="
+                    + java.net.URLEncoder.encode(result.getSetupToken(), java.nio.charset.StandardCharsets.UTF_8)
+                    + "&email=" + java.net.URLEncoder.encode(result.getEmail(), java.nio.charset.StandardCharsets.UTF_8);
 
             response.sendRedirect(redirect);
 

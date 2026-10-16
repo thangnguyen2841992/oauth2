@@ -38,7 +38,7 @@ class GoogleLoginTest {
         var response = new MockHttpServletResponse();
         controller.callbackGoogle("code", value, value, response);
         assertTrue(response.getHeader("Set-Cookie").contains("Max-Age=0"));
-        assertTrue(response.getRedirectedUrl().contains("setup-password?token=setup-token"));
+        assertEquals("http://localhost:5173/google/setup-password#token=setup-token&email=user%40example.com", response.getRedirectedUrl());
         verify(users).loginWithGoogle("code");
     }
 }

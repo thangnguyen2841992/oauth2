@@ -11,6 +11,8 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 
 class AdminAccountServiceTest {
     IUserRepository users = mock(IUserRepository.class);
@@ -18,6 +20,22 @@ class AdminAccountServiceTest {
     AdminAccountAuditRepository audits = mock(AdminAccountAuditRepository.class);
     SessionService sessions = mock(SessionService.class);
     AdminAccountService service = new AdminAccountService(users, registration, audits, sessions);
+
+    @Test void accountListUsesBoundedServerSidePagination() {
+        User account = new User(); account.setUserId("u1"); account.setEmail("user@example.com"); account.setRoleName("USER");
+        when(users.adminSearch(eq("user"), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(account)));
+        var result = service.list(" User ", 2, 25);
+        assertEquals(1, result.getNumberOfElements());
+        verify(users).adminSearch(eq("user"), argThat(page -> page.getPageNumber() == 2 && page.getPageSize() == 25));
+        assertThrows(ResponseStatusException.class, () -> service.list("", 0, 101));
+    }
+
+    @Test void summaryCountsActiveUsersAndStaffWithoutLoadingEntities() {
+        when(users.countByRoleNameAndIsActiveTrue("USER")).thenReturn(120L);
+        when(users.countByRoleNameAndIsActiveTrue("STAFF")).thenReturn(8L);
+        assertEquals(new AdminAccountService.Summary(120, 8), service.summary());
+        verify(users, never()).findAll();
+    }
 
     @Test void cannotRemoveLastActiveAdmin() {
         User target = new User(); target.setUserId("admin-b"); target.setRoleName("ADMIN"); target.setActive(true);

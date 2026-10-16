@@ -16,7 +16,11 @@ import java.util.List;
 public class AdminAccountController {
     private final AdminAccountService accounts;
 
-    @GetMapping public List<AdminAccountService.Account> list() { return accounts.list(); }
+    @GetMapping public org.springframework.data.domain.Page<AdminAccountService.Account> list(
+            @RequestParam(defaultValue="") String search,
+            @RequestParam(defaultValue="0") int page,
+            @RequestParam(defaultValue="25") int size) { return accounts.list(search, page, size); }
+    @GetMapping("/summary") public AdminAccountService.Summary summary() { return accounts.summary(); }
     @PostMapping public AdminAccountService.Account invite(@AuthenticationPrincipal Jwt jwt,
             @RequestBody AdminAccountService.Invite request) { return accounts.invite(jwt.getSubject(), request); }
     @PatchMapping("/{id}/role") public AdminAccountService.Account role(@AuthenticationPrincipal Jwt jwt,

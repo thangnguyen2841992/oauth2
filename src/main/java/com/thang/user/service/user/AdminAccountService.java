@@ -7,6 +7,8 @@ import com.thang.user.repository.AdminAccountAuditRepository;
 import com.thang.user.repository.IUserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,9 +37,20 @@ public class AdminAccountService {
     public record Invite(String email, String firstName, String lastName, String role) {}
     public record RoleChange(String role) {}
     public record StatusChange(boolean active) {}
+    public record Summary(long activeUsers, long activeStaff) {}
 
     @Transactional(readOnly = true)
-    public List<Account> list() { return users.findAll().stream().map(Account::from).toList(); }
+    public Page<Account> list(String search, int page, int size) {
+        if (page < 0 || size < 1 || size > 100) throw bad("Phân trang không hợp lệ");
+        String normalized = search == null ? "" : search.trim().toLowerCase(java.util.Locale.ROOT);
+        return users.adminSearch(normalized, PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "dateCreated", "userId")))
+                .map(Account::from);
+    }
+
+    @Transactional(readOnly = true)
+    public Summary summary() {
+        return new Summary(users.countByRoleNameAndIsActiveTrue("USER"), users.countByRoleNameAndIsActiveTrue("STAFF"));
+    }
 
     @Transactional
     public Account invite(String actor, Invite request) {
