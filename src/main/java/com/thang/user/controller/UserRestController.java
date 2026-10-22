@@ -29,11 +29,7 @@ public class UserRestController {
 //        return new ResponseEntity<>(userService.getAllUsersKeyCloak(), HttpStatus.OK);
 //    }
 
-    @PreAuthorize("hasAnyRole('ADMIN', 'STAFF')")
-    @GetMapping("/getAllUsers")
-    public ResponseEntity<?> getAllUsers() {
-        return new ResponseEntity<>(userService.getAllUsers(), HttpStatus.OK);
-    }
+    // The unpaged /getAllUsers list was removed; admins use /api/users/admin/accounts (paged search).
 
     @PreAuthorize("hasAnyRole('ADMIN', 'STAFF') or (hasRole('USER') and #email == authentication.token.claims['email'])")
     @GetMapping("/findUserByEmail")

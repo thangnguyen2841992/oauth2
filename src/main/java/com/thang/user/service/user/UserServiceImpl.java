@@ -149,26 +149,6 @@ public class UserServiceImpl implements IUserService {
     }
 
     // =========================================================
-    // GET ALL USERS
-    // =========================================================
-
-    @Override
-    @Transactional(readOnly = true)
-    public List<UserDTO> getAllUsers() {
-
-        List<User> users = userRepository.findAll();
-
-        List<UserDTO> dtos = new ArrayList<>();
-
-        for (User user : users) {
-
-            dtos.add(mapperUserToUserDTO(user));
-        }
-
-        return dtos;
-    }
-
-    // =========================================================
     // FIND USER BY EMAIL
     // =========================================================
 

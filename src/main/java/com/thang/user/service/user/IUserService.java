@@ -9,7 +9,6 @@ public interface IUserService {
 
     User createUser(CreateUserRequest dto);
 
-    List<UserDTO> getAllUsers();
 
     User findUserByEmail(String email);
 
