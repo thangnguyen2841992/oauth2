@@ -37,6 +37,7 @@ public class AuthController {
     private String googleRedirectUri;
     @Value("${FRONTEND_URL:http://localhost:5173}") private String frontendUrl;
     @Value("${COOKIE_SECURE:true}") private boolean cookieSecure = true;
+    @Value("${auth.refresh-cookie-path:" + AuthCookies.DEFAULT_REFRESH_PATH + "}") private String refreshCookiePath = AuthCookies.DEFAULT_REFRESH_PATH;
 
 
     @PostMapping("/login")
@@ -45,10 +46,7 @@ public class AuthController {
 
             TokenUserResponse res = userService.login(request);
 
-            ResponseCookie accessToken = getResponseCookie(res);
-            ResponseCookie refreshToken = getCookie(res);
-
-            return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, accessToken.toString()).header(HttpHeaders.SET_COOKIE, refreshToken.toString()).body(Map.of("message", "Login success"));
+            return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, authCookies(res)).body(Map.of("message", "Login success"));
 
         } catch (com.thang.user.service.user.MfaRequiredException required) {
             return ResponseEntity.status(202).header(HttpHeaders.SET_COOKIE,
@@ -63,14 +61,9 @@ public class AuthController {
         }
     }
 
-    private @NonNull ResponseCookie getCookie(TokenUserResponse res) {
-        return ResponseCookie.from("refreshToken", res.getRefresh_token()).httpOnly(true).path("/").maxAge(remaining(res.getRefreshExpiresAt())).sameSite("Lax").secure(cookieSecure).build();
+    private String[] authCookies(TokenUserResponse res) {
+        return AuthCookies.issue(res, cookieSecure, refreshCookiePath).toArray(String[]::new);
     }
-
-    private @NonNull ResponseCookie getResponseCookie(TokenUserResponse res) {
-        return ResponseCookie.from("accessToken", res.getAccess_token()).httpOnly(true).path("/").maxAge(remaining(res.getAccessExpiresAt())).sameSite("Lax").secure(cookieSecure).build();
-    }
-    private long remaining(long expiresAt) { return Math.max(0, (expiresAt - System.currentTimeMillis()) / 1000); }
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody CreateUserRequest request) {
@@ -161,8 +154,7 @@ public class AuthController {
             return ResponseEntity.status(503).body(Map.of("message", "Chưa thể thu hồi phiên. Vui lòng thử đăng xuất lại."));
         } catch (RuntimeException e) { /* Already expired or invalid: clear browser cookies. */ }
         return ResponseEntity.ok()
-            .header(HttpHeaders.SET_COOKIE, ResponseCookie.from("accessToken", "").httpOnly(true).secure(cookieSecure).sameSite("Lax").path("/").maxAge(0).build().toString())
-            .header(HttpHeaders.SET_COOKIE, ResponseCookie.from("refreshToken", "").httpOnly(true).secure(cookieSecure).sameSite("Lax").path("/").maxAge(0).build().toString())
+            .header(HttpHeaders.SET_COOKIE, AuthCookies.clear(cookieSecure, refreshCookiePath).toArray(String[]::new))
             .body(Map.of("message", "logged out"));
     }
     @GetMapping("/checkEmail")
@@ -185,11 +177,7 @@ public class AuthController {
 
             TokenUserResponse res = userService.refresh(refreshToken);
 
-            ResponseCookie accessToken = getResponseCookie(res);
-
-            ResponseCookie newRefreshToken = getCookie(res);
-
-            return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, accessToken.toString()).header(HttpHeaders.SET_COOKIE, newRefreshToken.toString())
+            return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, authCookies(res))
                     .body(Map.of("message", "refreshed", "accessExpiresAt", res.getAccessExpiresAt()));
 
         } catch (Exception e) {
@@ -295,7 +283,6 @@ public class AuthController {
     }
 
     private void setAuthCookies(HttpServletResponse response, TokenUserResponse token) {
-        response.addHeader(HttpHeaders.SET_COOKIE, getResponseCookie(token).toString());
-        response.addHeader(HttpHeaders.SET_COOKIE, getCookie(token).toString());
+        for (String cookie : authCookies(token)) response.addHeader(HttpHeaders.SET_COOKIE, cookie);
     }
 }

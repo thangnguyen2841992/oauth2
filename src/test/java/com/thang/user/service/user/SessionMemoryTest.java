@@ -81,4 +81,42 @@ class SessionMemoryTest {
         assertNull(sessions.deadline("admin", "sid", true));
         assertNull(sessions.rotate("admin", "sid", "old", "new"));
     }
+
+    @Test void learnerIdleIsExtendedByRefreshUpToTheAbsoluteDeadline() throws Exception {
+        SessionService sessions = new SessionService();
+        ReflectionTestUtils.setField(sessions, "userIdleTimeout", 100);
+        long expires = System.currentTimeMillis() + 60000;
+        sessions.create("user", "sid", "old", expires, "USER");
+        long initial = sessions.deadline("user", "sid", false);
+        assertTrue(initial < expires, "a learner session starts with the idle limit");
+        Thread.sleep(30);
+        assertEquals("new", sessions.rotate("user", "sid", "old", "new"));
+        assertTrue(sessions.deadline("user", "sid", false) > initial, "using the site (refresh) extends the idle limit");
+        assertTrue(sessions.deadline("user", "sid", false) <= expires);
+        Thread.sleep(150);
+        assertNull(sessions.deadline("user", "sid", false), "an unused learner session expires after the idle limit");
+    }
+
+    @Test void staffIdleIsExtendedByInteractionsButNotByRefresh() throws Exception {
+        SessionService sessions = new SessionService();
+        ReflectionTestUtils.setField(sessions, "staffIdleTimeout", 150);
+        long expires = System.currentTimeMillis() + 60000;
+        sessions.create("staff", "sid", "old", expires, "STAFF");
+        long initial = sessions.deadline("staff", "sid", false);
+        Thread.sleep(30);
+        sessions.rotate("staff", "sid", "old", "new");
+        assertEquals(initial, sessions.deadline("staff", "sid", false), "an open tab refreshing tokens does not keep staff signed in");
+        assertTrue(sessions.deadline("staff", "sid", true) > initial);
+    }
+
+    @Test void previousRefreshTokenIsAnsweredWithinTheGraceWindowOnly() throws Exception {
+        SessionService sessions = new SessionService();
+        ReflectionTestUtils.setField(sessions, "reuseGrace", 50);
+        sessions.create("user", "sid", "old", System.currentTimeMillis() + 60000, "USER");
+        assertEquals("new", sessions.rotate("user", "sid", "old", "new"));
+        assertEquals("new", sessions.rotate("user", "sid", "old", "retry"), "a retried refresh gets the same successor");
+        Thread.sleep(80);
+        assertNull(sessions.rotate("user", "sid", "old", "late"), "replay after the window revokes the session");
+        assertFalse(sessions.isValidSession("user", "sid"));
+    }
 }

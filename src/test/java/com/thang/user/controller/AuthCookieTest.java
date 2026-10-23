@@ -19,8 +19,13 @@ class AuthCookieTest {
             .refreshExpiresAt(System.currentTimeMillis() + 90000).build();
     }
     void assertCookies(java.util.List<String> cookies) {
-        assertEquals(2, cookies.size());
-        String refresh = cookies.stream().filter(s -> s.startsWith("refreshToken=")).findFirst().orElseThrow();
+        assertEquals(3, cookies.size());
+        String refresh = cookies.stream().filter(s -> s.startsWith("refreshToken=refresh")).findFirst().orElseThrow();
+        assertTrue(refresh.contains("Path=/api/auth"), "the refresh token is only sent to the auth endpoints: " + refresh);
+        String access = cookies.stream().filter(s -> s.startsWith("accessToken=")).findFirst().orElseThrow();
+        assertTrue(access.contains("Path=/;") || access.endsWith("Path=/"), access);
+        // The copy issued by older versions on "/" is expired so browsers do not send two refresh cookies.
+        assertTrue(cookies.stream().anyMatch(s -> s.startsWith("refreshToken=;") && s.contains("Path=/;") && s.contains("Max-Age=0")), cookies.toString());
         var matcher = java.util.regex.Pattern.compile("Max-Age=(\\d+)").matcher(refresh);
         assertTrue(matcher.find()); long age = Long.parseLong(matcher.group(1));
         assertTrue(age > 85 && age <= 90, refresh);
@@ -76,5 +81,11 @@ class AuthCookieTest {
 
         assertEquals(200, response.getStatusCode().value());
         verify(users).extractUsername(argThat(claims -> "user".equals(claims.getSubject())));
+    }
+    @Test void logoutClearsBothRefreshCookiePaths() {
+        var cookies = controller.logout(null, null).getHeaders().get("Set-Cookie");
+        assertTrue(cookies.stream().anyMatch(c -> c.startsWith("refreshToken=;") && c.contains("Path=/api/auth") && c.contains("Max-Age=0")), cookies.toString());
+        assertTrue(cookies.stream().anyMatch(c -> c.startsWith("refreshToken=;") && c.contains("Path=/;") && c.contains("Max-Age=0")), cookies.toString());
+        assertTrue(cookies.stream().anyMatch(c -> c.startsWith("accessToken=;") && c.contains("Max-Age=0")), cookies.toString());
     }
 }

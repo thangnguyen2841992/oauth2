@@ -13,6 +13,11 @@ public interface AuthActivationOutboxRepository extends JpaRepository<AuthActiva
     @Query("select o from AuthActivationOutbox o where o.availableAt<=:now and o.claimedUntil<=:now and o.expiresAt>:now order by o.availableAt,o.id")
     List<AuthActivationOutbox> next(long now, Pageable page);
 
+    // Earliest moment a live row becomes claimable: the later of its retry time and its current lease.
+    @Query("select min(case when o.claimedUntil > o.availableAt then o.claimedUntil else o.availableAt end) "
+            + "from AuthActivationOutbox o where o.expiresAt > :now")
+    Long nextAvailable(long now);
+
     @Modifying
     @Query("delete from AuthActivationOutbox o where o.id=:id and o.claimToken=:claim")
     int acknowledge(String id, String claim);

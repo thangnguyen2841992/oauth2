@@ -68,10 +68,19 @@ eureka:
 
 jwt:
   secret: ${JWT_SECRET:}
-  access-expiration: 300000
-  refresh-expiration: 604800000
+  # Access token: 15 minutes. Revocation does not depend on it: gateway/services check the session on every request.
+  access-expiration: 900000
+  # Absolute session lifetime: USER 30 days, STAFF 12 hours, ADMIN 8 hours.
+  refresh-expiration: 2592000000
+  staff-refresh-expiration: 43200000
   admin-refresh-expiration: 28800000
+  # Idle limits: USER 7 days (extended by refresh while using the site); STAFF 2 hours, ADMIN 30 minutes
+  # (extended only by real interactions via POST /api/auth/activity).
+  user-idle-timeout: 604800000
+  staff-idle-timeout: 7200000
   admin-idle-timeout: 1800000
+  # A previous refresh token is still accepted this long after rotation (parallel tabs, retried requests).
+  refresh-reuse-grace-ms: 30000
 
 google:
   client-id: 243434037577-d3hf8i7nijo996g3ate2pibmsli3bhff.apps.googleusercontent.com

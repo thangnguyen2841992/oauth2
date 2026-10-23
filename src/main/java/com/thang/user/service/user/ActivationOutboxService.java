@@ -19,6 +19,10 @@ public class ActivationOutboxService {
     private static final ObjectMapper JSON = new ObjectMapper();
     private final AuthActivationOutboxRepository outbox;
     private final SessionTokenCipher cipher;
+    private final org.springframework.context.ApplicationEventPublisher events;
+
+    /** Published inside the enqueuing transaction; the publisher wakes up after it commits. */
+    public record Queued() {}
 
     public record Delivery(String id, String claim, String userId, String payload, long expiresAt, int attempts) {}
 
@@ -35,6 +39,7 @@ public class ActivationOutboxService {
         row.setExpiresAt(expiresAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli());
         row.setAvailableAt(System.currentTimeMillis());
         outbox.save(row);
+        events.publishEvent(new Queued());
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -50,6 +55,13 @@ public class ActivationOutboxService {
         row.setClaimedUntil(now + LEASE_MILLIS);
         return new Delivery(row.getId(), row.getClaimToken(), row.getUserId(), row.getEncryptedPayload(),
                 row.getExpiresAt(), row.getAttempts());
+    }
+
+    /** Milliseconds until the earliest row can be claimed (retry backoff or lease expiry), capped at {@code limit}. */
+    public long idleMillis(long limit) {
+        long now = System.currentTimeMillis();
+        Long next = outbox.nextAvailable(now);
+        return next == null ? limit : Math.max(0, Math.min(limit, next - now));
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)

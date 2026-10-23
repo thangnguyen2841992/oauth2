@@ -16,7 +16,7 @@ public class TokenService {
     public TokenUserResponse generateToken(User user, String sid) {
         long expires = (System.currentTimeMillis() + jwtService.sessionDuration(user)) / 1000 * 1000;
         String refresh = jwtService.generateRefreshToken(user, sid, expires);
-        sessionService.create(user.getUserId(), sid, refresh, expires, "ADMIN".equals(user.getRoleName()));
+        sessionService.create(user.getUserId(), sid, refresh, expires, user.getRoleName());
         return response(user, sid, refresh, expires);
     }
     public TokenUserResponse refreshToken(String token) {

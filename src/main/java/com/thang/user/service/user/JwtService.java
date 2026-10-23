@@ -19,6 +19,8 @@ public class JwtService {
  private final String issuer,audience;
  private final long accessExpiration,refreshExpiration;
  @Value("${jwt.admin-refresh-expiration:28800000}") private long adminRefreshExpiration=28800000;
+ // STAFF edits/publishes content and manages monitoring targets: a working-day session, not a learner's month.
+ @Value("${jwt.staff-refresh-expiration:43200000}") private long staffRefreshExpiration=43200000;
  @Autowired public JwtService(Environment env){
   boolean legacy=SecurityJwtDecoders.legacy(env);
   secretKey=legacy?Keys.hmacShaKeyFor(Decoders.BASE64.decode(env.getRequiredProperty("jwt.secret"))):null;
@@ -27,11 +29,12 @@ public class JwtService {
   if(privateKey instanceof java.security.interfaces.RSAPrivateKey rsa&&publicKey instanceof java.security.interfaces.RSAPublicKey pub&&!rsa.getModulus().equals(pub.getModulus()))throw new IllegalStateException("RSA public and private keys do not match");
   if(publicKey instanceof java.security.interfaces.RSAPublicKey rsa&&rsa.getModulus().bitLength()<2048)throw new IllegalStateException("RSA key must contain at least 2048 bits");
   issuer=env.getProperty("security.jwt.issuer","nihongo-auth");audience=env.getProperty("security.jwt.audience","nihongo-api");
-  accessExpiration=env.getProperty("jwt.access-expiration",Long.class,300000L);refreshExpiration=env.getProperty("jwt.refresh-expiration",Long.class,604800000L);
+  accessExpiration=env.getProperty("jwt.access-expiration",Long.class,900000L);refreshExpiration=env.getProperty("jwt.refresh-expiration",Long.class,2592000000L);
  }
  /** Explicit HMAC fixture constructor, not used by Spring. */
  public JwtService(String secret,long accessExpiration,long refreshExpiration){secretKey=Keys.hmacShaKeyFor(Decoders.BASE64.decode(secret));privateKey=null;publicKey=null;issuer="nihongo-auth";audience="nihongo-api";this.accessExpiration=accessExpiration;this.refreshExpiration=refreshExpiration;}
- public long sessionDuration(User user){return "ADMIN".equals(user.getRoleName())?adminRefreshExpiration:refreshExpiration;}
+ /** Absolute session lifetime by role; the idle limits live in SessionService. */
+ public long sessionDuration(User user){return switch(String.valueOf(user.getRoleName())){case "ADMIN"->adminRefreshExpiration;case "STAFF"->staffRefreshExpiration;default->refreshExpiration;};}
  private JwtBuilder base(){return Jwts.builder().issuer(issuer).claim("aud",List.of(audience)).issuedAt(new Date());}
  private String sign(JwtBuilder builder){return (privateKey==null?builder.signWith(secretKey,Jwts.SIG.HS256):builder.signWith(privateKey,Jwts.SIG.RS256)).compact();}
  public String generateAccessToken(User user,String sid){return generateAccessToken(user,sid,System.currentTimeMillis()+accessExpiration);}

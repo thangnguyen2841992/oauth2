@@ -17,15 +17,15 @@ class TokenLifetimeTest {
         var user = new User(); user.setUserId("test-user"); user.setEmail("test@example.com");
         user.setRoleName(role); user.setActive(true); return user;
     }
-    @Test void userAndAdminHaveDifferentAbsoluteDeadlines() {
-        for (String role : new String[]{"USER", "ADMIN"}) {
+    @Test void eachRoleHasItsOwnAbsoluteDeadline() {
+        for (String role : new String[]{"USER", "STAFF", "ADMIN"}) {
             long now = System.currentTimeMillis();
             when(sessions.deadline("test-user", "sid", false)).thenReturn(now + 1800000);
             var response = service.generateToken(user(role), "sid");
-            long expected = role.equals("ADMIN") ? 28800000 : 604800000;
+            long expected = switch (role) { case "ADMIN" -> 28800000L; case "STAFF" -> 43200000L; default -> 604800000L; };
             assertEquals(expected, response.getRefreshExpiresAt() - now, 2000);
             assertEquals(300000, response.getAccessExpiresAt() - now, 2000);
-            verify(sessions).create(eq("test-user"), eq("sid"), eq(response.getRefresh_token()), eq(response.getRefreshExpiresAt()), eq(role.equals("ADMIN")));
+            verify(sessions).create(eq("test-user"), eq("sid"), eq(response.getRefresh_token()), eq(response.getRefreshExpiresAt()), eq(role));
         }
     }
     @Test void rotationPreservesOriginalExpiryAndCapsAccessAtDeadline() {
