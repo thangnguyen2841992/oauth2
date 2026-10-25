@@ -21,6 +21,18 @@ public class SessionService {
     @org.springframework.beans.factory.annotation.Autowired
     public SessionService(com.thang.user.repository.AuthSessionRepository store,SessionTokenCipher cipher){this.store=store;this.cipher=cipher;}
     private final ConcurrentHashMap<String, Session> sessions = new ConcurrentHashMap<>();
+    // Requests reaching this service were already checked by the gateway. Like the other services
+    // (RemoteSessionVerifier), a confirmed session is reused for a few seconds instead of a DB query per request;
+    // every session change made here (login, rotation, logout, revocation, cleanup) drops the cached answer at once.
+    @Value("${auth.session-cache-ttl:5000}")
+    private long confirmedTtl = 5000;
+    private record Confirmed(String sid, Object role, long until, long deadline) {}
+    private final ConcurrentHashMap<String, Confirmed> confirmed = new ConcurrentHashMap<>();
+    private void forget(String userId) { if (userId != null) confirmed.remove(userId); }
+    private void remember(String userId, String sid, com.thang.user.repository.AuthSessionRepository.Deadline d, long now) {
+        long deadline = Math.min(d.getExpiresAt(), d.getIdleUntil());
+        if (confirmedTtl > 0) confirmed.put(userId, new Confirmed(sid, d.getRole(), Math.min(now + confirmedTtl, deadline), deadline));
+    }
     // Idle limits by role. ADMIN and STAFF are extended only by real interactions (POST /api/auth/activity), never by
     // token refresh, so an open but unattended tab still expires. USER is extended by each refresh, i.e. while the
     // learner keeps using the site, up to the absolute lifetime (JwtService.sessionDuration).
@@ -47,6 +59,7 @@ public class SessionService {
 
     @org.springframework.transaction.annotation.Transactional
     public void create(String userId, String sid, String token, long expires, String role) {
+        forget(userId);
         long now = System.currentTimeMillis();
         long idle = Math.min(expires, now + idleTimeout(role));
         // admin_session marks sessions with an interaction-based idle limit (ADMIN and STAFF).
@@ -69,12 +82,14 @@ public class SessionService {
 
     @org.springframework.transaction.annotation.Transactional
     public void removeSession(String userId) {
+        forget(userId);
         if(store!=null){if(userId!=null)store.revoke(userId,null);return;}
         if (userId != null) sessions.remove(userId);
     }
 
     @org.springframework.transaction.annotation.Transactional
     public void removeSession(String userId, String sid) {
+        forget(userId);
         if(store!=null){if(userId!=null&&sid!=null)store.revoke(userId,sid);return;}
         if (userId != null && sid != null) sessions.computeIfPresent(userId,
                 (ignored, session) -> sid.equals(session.sid) ? null : session);
@@ -116,6 +131,7 @@ public class SessionService {
         if (userId == null || sid == null || oldToken == null || newToken == null) return null;
         long now = System.currentTimeMillis();
         String presented = hash(oldToken);
+        forget(userId);
         if(store!=null){var row=store.lock(userId).orElse(null);if(row==null||!sid.equals(row.getSid()))return null;if(row.getExpiresAt()<=now||row.getIdleUntil()<=now){store.delete(row);return null;}if(presented.equals(row.getCurrentHash())){if(now<row.getRotateAfter())return cipher.decrypt(userId,row.getEncryptedRefresh());row.setEncryptedRefresh(cipher.encrypt(userId,newToken));row.setPreviousHash(row.getCurrentHash());row.setCurrentHash(hash(newToken));row.setRotateAfter(now+reuseGrace);if(!row.isAdminSession())row.setIdleUntil(Math.min(row.getExpiresAt(),now+userIdleTimeout));return newToken;}if(now<row.getRotateAfter()&&presented.equals(row.getPreviousHash()))return cipher.decrypt(userId,row.getEncryptedRefresh());store.delete(row);return null;}
         AtomicReference<String> result = new AtomicReference<>();
         sessions.computeIfPresent(userId, (ignored, session) -> {
@@ -143,6 +159,7 @@ public class SessionService {
     @Scheduled(fixedDelay = 300000)
     @org.springframework.transaction.annotation.Transactional
     public void removeExpiredSessions() {
+        confirmed.clear();
         long now = System.currentTimeMillis();
         if(store!=null){store.cleanup(now);return;}
         sessions.forEach((userId, session) -> {
@@ -159,10 +176,31 @@ public class SessionService {
         }
     }
     private static boolean valid(com.thang.user.repository.AuthSessionRepository.Deadline d,long now){return d.getActive()&&d.getExpiresAt()>now&&d.getIdleUntil()>now;}
+    /**
+     * A recently confirmed deadline for this exact session and role, or null. Not transactional, so a hit costs no
+     * pooled connection; the gateway and every service validating the same session within a few seconds share it.
+     */
+    public Long confirmedDeadline(String userId, String sid, java.util.List<?> roles) {
+        if (store == null || userId == null || sid == null || roles == null || roles.size() != 1) return null;
+        var hit = confirmed.get(userId);
+        return hit != null && hit.until() > System.currentTimeMillis() && hit.sid().equals(sid) && hit.role().equals(roles.get(0))
+                ? hit.deadline() : null;
+    }
+
     @org.springframework.transaction.annotation.Transactional
-    public Long accessDeadline(String userId,String sid,java.util.List<?> roles,boolean activity){if(userId==null||sid==null||roles==null||roles.size()!=1)return null;if(store==null)return deadline(userId,sid,activity);long now=System.currentTimeMillis();var d=store.deadline(userId).orElse(null);if(d==null||!valid(d,now)||!sid.equals(d.getSid())||!d.getRole().equals(roles.get(0)))return null;if(!activity)return Math.min(d.getExpiresAt(),d.getIdleUntil());var row=store.lock(userId).orElse(null);if(row==null||!sid.equals(row.getSid())||row.getExpiresAt()<=now||row.getIdleUntil()<=now)return null;if(row.isAdminSession())row.setIdleUntil(Math.min(row.getExpiresAt(),now+idleTimeout(d.getRole())));return Math.min(row.getExpiresAt(),row.getIdleUntil());}
-    @org.springframework.transaction.annotation.Transactional(readOnly=true)
-    public boolean roleMatches(String userId,String sid,java.util.List<?> roles){if(roles==null||roles.size()!=1)return false;if(store==null)return isValidSession(userId,sid);return store.deadline(userId).filter(d->valid(d,System.currentTimeMillis())&&sid.equals(d.getSid())&&d.getRole().equals(roles.get(0))).isPresent();}
+    public Long accessDeadline(String userId,String sid,java.util.List<?> roles,boolean activity){if(userId==null||sid==null||roles==null||roles.size()!=1)return null;if(store==null)return deadline(userId,sid,activity);long now=System.currentTimeMillis();if(activity)forget(userId);var d=store.deadline(userId).orElse(null);if(d==null||!valid(d,now)||!sid.equals(d.getSid())||!d.getRole().equals(roles.get(0)))return null;if(!activity){remember(userId,sid,d,now);return Math.min(d.getExpiresAt(),d.getIdleUntil());}var row=store.lock(userId).orElse(null);if(row==null||!sid.equals(row.getSid())||row.getExpiresAt()<=now||row.getIdleUntil()<=now)return null;if(row.isAdminSession())row.setIdleUntil(Math.min(row.getExpiresAt(),now+idleTimeout(d.getRole())));return Math.min(row.getExpiresAt(),row.getIdleUntil());}
+    // Not transactional: a cache hit must not borrow a pooled connection; the repository query has its own.
+    public boolean roleMatches(String userId,String sid,java.util.List<?> roles){
+        if(roles==null||roles.size()!=1||userId==null||sid==null)return false;
+        if(store==null)return isValidSession(userId,sid);
+        long now=System.currentTimeMillis();
+        var hit=confirmed.get(userId);
+        if(hit!=null&&hit.until()>now&&hit.sid().equals(sid)&&hit.role().equals(roles.get(0)))return true;
+        var d=store.deadline(userId).filter(x->valid(x,now)&&sid.equals(x.getSid())&&x.getRole().equals(roles.get(0))).orElse(null);
+        if(d==null){confirmed.remove(userId,hit);return false;}
+        remember(userId,sid,d,now);
+        return true;
+    }
     @org.springframework.transaction.annotation.Transactional(readOnly=true)
     public java.util.List<String> invalidSessions(java.util.List<com.nihongo.security.RemoteSessionVerifier.SessionRef> refs){java.util.Map<String,com.thang.user.repository.AuthSessionRepository.Deadline> rows=new java.util.HashMap<>();store.deadlines(refs.stream().map(com.nihongo.security.RemoteSessionVerifier.SessionRef::userId).distinct().toList()).forEach(d->rows.put(d.getUserId(),d));long now=System.currentTimeMillis();return refs.stream().filter(r->{var d=rows.get(r.userId());return d==null||!valid(d,now)||!d.getSid().equals(r.sessionId())||r.roles()==null||r.roles().size()!=1||!d.getRole().equals(r.roles().get(0));}).map(r->r.userId()+":"+r.sessionId()).toList();}
 

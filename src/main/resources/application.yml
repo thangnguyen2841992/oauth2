@@ -39,8 +39,14 @@ spring:
 
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:127.0.0.1:9092}
+    # When the broker is down (e.g. Kafka not started locally) clients retry with a growing delay, up to 30 s,
+    # instead of logging a connection warning every second; reconnection is immediate once Kafka is back.
+    properties:
+      reconnect.backoff.ms: 1000
+      reconnect.backoff.max.ms: 30000
     admin:
       auto-create: ${KAFKA_AUTO_CREATE_TOPICS:true}
+      operation-timeout: 10s
     producer:
       acks: all
       enable-idempotence: true

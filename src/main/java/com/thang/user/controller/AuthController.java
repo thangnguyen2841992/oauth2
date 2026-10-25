@@ -116,6 +116,8 @@ public class AuthController {
 
     private io.jsonwebtoken.Claims activeClaims(String token, boolean activity) {
         var claims = jwtService.parseAndValidate(token);
+        if (!activity && "access".equals(claims.get("type", String.class)) && sessionService.confirmedDeadline(claims.getSubject(),
+                claims.get("sessionId", String.class), claims.get("roles", java.util.List.class)) != null) return claims;
         if (!"access".equals(claims.get("type", String.class)) ||
             sessionService.accessDeadline(claims.getSubject(),claims.get("sessionId",String.class),claims.get("roles",java.util.List.class),activity)==null) {
             throw new IllegalArgumentException("Session expired");

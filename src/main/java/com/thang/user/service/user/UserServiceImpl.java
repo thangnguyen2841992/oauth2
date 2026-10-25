@@ -52,13 +52,17 @@ public class UserServiceImpl implements IUserService {
     private final GoogleOAuthService googleOAuthService;
     private final AuthMfaService mfa;
     private final LoginAuditService loginHistory;
+    private final org.springframework.transaction.PlatformTransactionManager transactionManager;
+
+    private <T> T inTransaction(java.util.function.Supplier<T> work) {
+        return new org.springframework.transaction.support.TransactionTemplate(transactionManager).execute(status -> work.get());
+    }
 
     // =========================================================
     // CREATE USER
     // =========================================================
 
     @Override
-    @Transactional
     public User createUser(CreateUserRequest dto) {
 
         if (dto == null) {
@@ -91,6 +95,10 @@ public class UserServiceImpl implements IUserService {
             throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "Mật khẩu cần ít nhất 8 ký tự, tối đa 72 byte UTF-8, gồm chữ hoa, chữ thường, số và ký tự đặc biệt");
         }
 
+        // Hash before opening the transaction (see login). A concurrent registration of the same email is still
+        // rejected by the unique constraint when saving.
+        String encodedPassword = passwordEncoder.encode(dto.getPassword());
+        return inTransaction(() -> {
         String activeCode = createActiveCode();
 
         User user = new User();
@@ -113,7 +121,7 @@ public class UserServiceImpl implements IUserService {
 
         user.setActive(false);
 
-        user.setPassword(passwordEncoder.encode(dto.getPassword()));
+        user.setPassword(encodedPassword);
 
         user.setCodeActive(activeCode);
 
@@ -146,6 +154,7 @@ public class UserServiceImpl implements IUserService {
         log.info("Đã tạo yêu cầu gửi email kích hoạt cho userId={}", savedUser.getUserId());
 
         return savedUser;
+        });
     }
 
     // =========================================================
@@ -212,7 +221,6 @@ public class UserServiceImpl implements IUserService {
     // =========================================================
 
     @Override
-    @Transactional(noRollbackFor = MfaRequiredException.class)
     public TokenUserResponse login(LoginRequest loginRequest) {
 
         if (loginRequest == null || loginRequest.getEmail() == null || loginRequest.getEmail().isBlank()) {
@@ -235,55 +243,26 @@ public class UserServiceImpl implements IUserService {
 
         mfa.require(user);
 
-        // =====================================================
-        // TẠO SESSION MỚI
-        // =====================================================
-
-        String newSessionId = UUID.randomUUID().toString();
-
-        if (newSessionId == null || newSessionId.isBlank()) {
-
-            newSessionId = UUID.randomUUID().toString();
-        }
-
-        // =====================================================
-        // LẤY SESSION CŨ
-        // =====================================================
-
-        String oldSessionId = sessionService.getSession(user.getUserId());
-
-        // =====================================================
-        // FORCE LOGOUT SESSION CŨ
-        // =====================================================
-
-        if (oldSessionId != null && !oldSessionId.equals(newSessionId)) {
-
-            forceLogoutUser(user.getUserId(), oldSessionId);
-        }
-
-        // =====================================================
-        // SAVE SESSION MỚI
-        // =====================================================
-
-
-
-        // =====================================================
-        // UPDATE LAST LOGIN
-        // =====================================================
-
-        user.setLastLogin(LocalDateTime.now());
-
-        user.setDateModified(LocalDateTime.now());
-
-        userRepository.save(user);
-
-        // =====================================================
-        // GENERATE JWT
-        // =====================================================
-
-        var result = tokenService.generateToken(user, newSessionId);
-        loginHistory.record(user, "PASSWORD");
-        return result;
+        // The password check above ran without a transaction: BCrypt is deliberately slow and must not hold one of
+        // the shared database's pooled connections. Only the session/audit writes below need a transaction.
+        String userId = user.getUserId();
+        return inTransaction(() -> {
+            User current = userRepository.findByUserId(userId)
+                    .filter(User::isActive)
+                    .orElseThrow(() -> new RuntimeException("Tài khoản hoặc mật khẩu không đúng"));
+            String newSessionId = UUID.randomUUID().toString();
+            // Replace the previous session (other device/tab) and tell it to log out after commit.
+            String oldSessionId = sessionService.getSession(userId);
+            if (oldSessionId != null && !oldSessionId.equals(newSessionId)) {
+                forceLogoutUser(userId, oldSessionId);
+            }
+            current.setLastLogin(LocalDateTime.now());
+            current.setDateModified(LocalDateTime.now());
+            userRepository.save(current);
+            var result = tokenService.generateToken(current, newSessionId);
+            loginHistory.record(current, "PASSWORD");
+            return result;
+        });
     }
 
     // =========================================================
