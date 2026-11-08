@@ -21,6 +21,8 @@ class SessionValidationEndpointTest {
         when(claims.getSubject()).thenReturn("user");
         when(claims.get("roles",java.util.List.class)).thenReturn(java.util.List.of("USER"));
         when(sessions.roleMatches("user","sid",java.util.List.of("USER"))).thenReturn(true);
+        // No cached confirmation: validation must fall through to the live session deadline.
+        when(sessions.confirmedDeadline("user","sid",java.util.List.of("USER"))).thenReturn(null);
         when(sessions.accessDeadline("user","sid",java.util.List.of("USER"),false)).thenReturn(System.currentTimeMillis()+10000);
         var credentials=mock(com.nihongo.security.InternalCredentials.class);when(credentials.matches("internal")).thenReturn(true);
         var controller = new AuthController(mock(IUserService.class), sessions, jwt, new GoogleOAuthState(),credentials);

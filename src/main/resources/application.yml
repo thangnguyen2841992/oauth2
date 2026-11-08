@@ -12,8 +12,8 @@ spring:
     name: user-service
 
   datasource:
-    url: jdbc:mariadb://onehost-amdcloudhn022602.000nethost.com:3306/tsezwyvdhosting_nihongo?sslMode=disable&connectionTimeZone=UTC&allowPublicKeyRetrieval=true&connectTimeout=10000&socketTimeout=15000
-    username: tsezwyvdhosting_nihongo_app
+    url: ${DB_URL:jdbc:mariadb://onehost-amdcloudhn022602.000nethost.com:3306/tsezwyvdhosting_nihongo?sslMode=disable&connectionTimeZone=UTC&allowPublicKeyRetrieval=true&connectTimeout=10000&socketTimeout=15000}
+    username: ${DB_USERNAME:tsezwyvdhosting_nihongo_app}
     password: ${DB_PASSWORD:${SPRING_DATASOURCE_PASSWORD}}
     driver-class-name: org.mariadb.jdbc.Driver
 
