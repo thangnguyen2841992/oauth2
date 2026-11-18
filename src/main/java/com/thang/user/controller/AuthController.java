@@ -7,7 +7,6 @@ import com.thang.user.service.user.SessionService;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.jspecify.annotations.NonNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -57,6 +56,8 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                     .body(Map.of("message", "Dịch vụ đăng nhập tạm thời gián đoạn. Vui lòng thử lại."));
         } catch (RuntimeException e) {
+            // Every login failure answers the same message; log the real reason so it can be diagnosed.
+            log.warn("Login rejected: {}: {}", e.getClass().getSimpleName(), e.getMessage());
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Tài khoản hoặc mật khẩu không đúng"));
         }
     }
